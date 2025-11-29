@@ -1,0 +1,207 @@
+name: instachatico-app
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: instagram_postgres
+    labels:
+      - "project=instachatico-app"
+      - "service=postgres"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      LOGS_LEVEL_POSTGRES: ${LOGS_LEVEL_POSTGRES:-INFO}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - instachatico_postgres_data:/var/lib/postgresql/data
+      - ../database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - instagram_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} && psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -tAc \"SELECT 1 FROM pg_extension WHERE extname='vector'\" | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    command:
+      - postgres
+      - -c
+      - log_destination=stderr
+      - -c
+      - logging_collector=off
+      - -c
+      - log_line_prefix=%m | %p | postgres | 
+      - -c
+      - log_min_messages=${LOGS_LEVEL_POSTGRES:-INFO}
+      - -c
+      - log_min_error_statement=ERROR
+      - -c
+      - log_connections=off
+      - -c
+      - log_disconnections=off
+
+  redis:
+    image: redis:7-alpine
+    container_name: instagram_redis
+    labels:
+      - "project=instachatico-app"
+      - "service=redis"
+    ports:
+      - "${REDIS_HOST_INTERFACE:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - instachatico_redis_data:/data
+      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./config/redis/entrypoint.sh:/docker-entrypoint.d/10-custom-entrypoint.sh:ro
+    networks:
+      - instagram_network
+    environment:
+      - LOGS_LEVEL=${LOGS_LEVEL:-INFO}
+      - LOGS_LEVEL_REDIS=${LOGS_LEVEL_REDIS:-}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    command: ["sh", "-c", "sh /docker-entrypoint.d/10-custom-entrypoint.sh"]
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: instagram_api
+    labels:
+      - "project=instachatico-app"
+      - "service=api"
+    env_file:
+      - .env
+    ports:
+      - "${API_HOST_INTERFACE:-0.0.0.0}:${PORT}:${PORT}"
+    volumes:
+      - ../src:/app/src
+      - ../database:/app/database
+      - instachatico_conversations_data:/app/src/conversations
+    environment:
+      # Override Redis connection for Docker networking
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - INSTAGRAM_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - instagram_network
+    command: sh -c "cd /app/database && alembic upgrade head && cd /app/src && uvicorn main:app --host 0.0.0.0 --port ${PORT:-4291} --reload"
+    security_opt:
+      - no-new-privileges:true
+
+  celery_worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: instagram_celery_worker
+    labels:
+      - "project=instachatico-app"
+      - "service=celery_worker"
+    env_file:
+      - .env
+    volumes:
+      - ../src:/app/src
+      - ../database:/app/database
+      - instachatico_conversations_data:/app/src/conversations
+    environment:
+      # Override Redis connection for Docker networking
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - INSTAGRAM_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - instagram_network
+    command: sh -c "cd /app/src && python -c 'import celery_worker' && celery -A celery_worker worker --loglevel=${LOGS_LEVEL_CELERY:-${LOGS_LEVEL:-INFO}} --concurrency=4 --without-gossip --without-mingle --without-heartbeat -Q llm_queue,instagram_queue"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "cd /app/src && celery -A celery_worker inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  celery_beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: instagram_celery_beat
+    labels:
+      - "project=instachatico-app"
+      - "service=celery_beat"
+    env_file:
+      - .env
+    volumes:
+      - ../src:/app/src
+      - ../database:/app/database
+      - instachatico_conversations_data:/app/src/conversations
+      - instachatico_celerybeat_schedule:/app/celerybeat
+    environment:
+      # Override Redis connection for Docker networking
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - INSTAGRAM_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - instagram_network
+    command: sh -c "mkdir -p /app/celerybeat && cd /app/src && celery -A celery_worker beat --loglevel=${LOGS_LEVEL_CELERY:-${LOGS_LEVEL:-INFO}} -s /app/celerybeat/celerybeat-schedule"
+    security_opt:
+      - no-new-privileges:true
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: instagram_dozzle
+    labels:
+      - "project=instachatico-app"
+      - "service=dozzle"
+    ports:
+      - "57928:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config/dozzle/users.yml:/data/users.yml:ro
+    networks:
+      - instagram_network
+    environment:
+      - DOZZLE_NO_ANALYTICS=true
+      - DOZZLE_AUTH_PROVIDER=simple
+    restart: unless-stopped
+
+volumes:
+  instachatico_postgres_data:
+    driver: local
+    name: instachatico_postgres_data
+  instachatico_redis_data:
+    driver: local
+    name: instachatico_redis_data
+  instachatico_conversations_data:
+    driver: local
+    name: instachatico_conversations_data
+  instachatico_celerybeat_schedule:
+    driver: local
+    name: instachatico_celerybeat_schedule
+
+networks:
+  instagram_network:
+    driver: bridge
+    name: instachatico-network  
+    

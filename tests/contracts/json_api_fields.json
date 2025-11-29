@@ -1,0 +1,117 @@
+{
+  "MediaDTO": [
+    "id",
+    "permalink",
+    "caption",
+    "url",
+    "type",
+    "context",
+    "children_urls",
+    "comments_count",
+    "like_count",
+    "shortcode",
+    "posted_at",
+    "is_comment_enabled",
+    "is_processing_enabled",
+    "stats"
+  ],
+  "ClassificationDTO": [
+    "id",
+    "processing_status",
+    "processing_completed_at",
+    "last_error",
+    "confidence",
+    "classification_type",
+    "reasoning"
+  ],
+  "AnswerDTO": [
+    "id",
+    "processing_status",
+    "processing_completed_at",
+    "last_error",
+    "answer",
+    "confidence",
+    "quality_score",
+    "reply_sent",
+    "reply_status",
+    "reply_error",
+    "is_ai_generated",
+    "is_deleted"
+  ],
+  "CommentDTO": [
+    "id",
+    "media_id",
+    "parent_id",
+    "username",
+    "text",
+    "created_at",
+    "is_hidden",
+    "is_deleted",
+    "last_error",
+    "classification",
+    "answers"
+  ],
+  "SimpleMeta": [
+    "error"
+  ],
+  "PaginationMeta": [
+    "error",
+    "page",
+    "per_page",
+    "total"
+  ],
+  "MediaResponse": [
+    "meta",
+    "payload"
+  ],
+  "MediaListResponse": [
+    "meta",
+    "payload"
+  ],
+  "MediaQuickStats": [
+    "positive_feedback_total",
+    "positive_feedback_increment",
+    "questions_total",
+    "questions_increment",
+    "negative_feedback_total",
+    "negative_feedback_increment",
+    "urgent_issues_total",
+    "urgent_issues_increment",
+    "partnership_proposals_total",
+    "partnership_proposals_increment",
+    "toxic_abusive_total",
+    "toxic_abusive_increment",
+    "spam_irrelevant_total",
+    "spam_irrelevant_increment"
+  ],
+  "CommentResponse": [
+    "meta",
+    "payload"
+  ],
+  "CommentListResponse": [
+    "meta",
+    "payload",
+    "stats"
+  ],
+  "AnswerResponse": [
+    "meta",
+    "payload"
+  ],
+  "AnswerListResponse": [
+    "meta",
+    "payload"
+  ],
+  "ClassificationTypesResponse": [
+    "meta",
+    "payload"
+  ],
+  "ClassificationTypeDTO": [
+    "code",
+    "label"
+  ],
+  "ErrorDetail": [
+    "code",
+    "message",
+    "details"
+  ]
+}
