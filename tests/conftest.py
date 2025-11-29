@@ -18,6 +18,15 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
+# Prepopulate required env vars for settings before imports
+os.environ.setdefault("APP_SECRET", "dummy_app_secret")
+os.environ.setdefault("TOKEN", "dummy_token")
+os.environ.setdefault("YOUTUBE_CLIENT_ID", "dummy_youtube_client_id")
+os.environ.setdefault("YOUTUBE_CLIENT_SECRET", "dummy_youtube_client_secret")
+os.environ.setdefault("YOUTUBE_REFRESH_TOKEN", "dummy_youtube_refresh_token")
+os.environ.setdefault("YOUTUBE_API_KEY", "dummy_youtube_api_key")
+os.environ.setdefault("YOUTUBE_CHANNEL_ID", "dummy_youtube_channel_id")
+
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 

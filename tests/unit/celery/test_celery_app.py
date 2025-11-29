@@ -14,7 +14,7 @@ def test_celery_app_basic_configuration():
     conf = celery_app.conf
 
     # Identity and broker/back-end setup
-    assert celery_app.main == "instagram_classifier"
+    assert celery_app.main == "youtube_comment_manager"
     assert conf.broker_connection_retry_on_startup is True
     assert conf.broker_connection_retry is True
     assert conf.result_backend_transport_options["retry_on_timeout"] is True
@@ -44,6 +44,7 @@ def test_celery_app_includes_and_routes():
         "core.tasks.media_tasks",
         "core.tasks.document_tasks",
         "core.tasks.instagram_token_tasks",
+        "core.tasks.youtube_tasks",
     }
     assert expected_modules.issubset(imports)
 
@@ -52,6 +53,9 @@ def test_celery_app_includes_and_routes():
     assert routes["core.tasks.answer_tasks.generate_answer_task"]["queue"] == "llm_queue"
     assert routes["core.tasks.instagram_reply_tasks.send_instagram_reply_task"]["queue"] == "instagram_queue"
     assert routes["core.tasks.instagram_reply_tasks.hide_instagram_comment_task"]["queue"] == "instagram_queue"
+    assert routes["core.tasks.youtube_tasks.poll_youtube_comments_task"]["queue"] == "youtube_queue"
+    assert routes["core.tasks.youtube_tasks.send_youtube_reply_task"]["queue"] == "youtube_queue"
+    assert routes["core.tasks.youtube_tasks.delete_youtube_comment_task"]["queue"] == "youtube_queue"
 
 
 @pytest.mark.unit
@@ -68,6 +72,9 @@ def test_celery_app_beat_schedule():
     assert health_entry["task"] == "core.tasks.health_tasks.check_system_health_task"
 
     assert "check-instagram-token-expiration" not in beat_schedule
+    assert "poll-youtube-comments" in beat_schedule
+    youtube_entry = beat_schedule["poll-youtube-comments"]
+    assert youtube_entry["task"] == "core.tasks.youtube_tasks.poll_youtube_comments_task"
 
 
 @pytest.mark.unit

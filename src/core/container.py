@@ -19,6 +19,8 @@ from .services.media_analysis_service import MediaAnalysisService
 from .services.embedding_service import EmbeddingService
 from .services.telegram_alert_service import TelegramAlertService
 from .services.s3_service import S3Service
+from .services.youtube_service import YouTubeService
+from .services.youtube_media_service import YouTubeMediaService
 from .services.document_processing_service import DocumentProcessingService
 from .services.document_context_service import DocumentContextService
 from .services.agent_session_service import AgentSessionService
@@ -49,6 +51,9 @@ from .use_cases.create_manual_answer import CreateManualAnswerUseCase
 from .use_cases.generate_stats_report import GenerateStatsReportUseCase
 from .use_cases.generate_moderation_stats import GenerateModerationStatsUseCase
 from .use_cases.record_follower_snapshot import RecordFollowerSnapshotUseCase
+from .use_cases.poll_youtube_comments import PollYouTubeCommentsUseCase
+from .use_cases.send_youtube_reply import SendYouTubeReplyUseCase
+from .use_cases.delete_youtube_comment import DeleteYouTubeCommentUseCase
 
 # Repositories
 from .repositories.comment import CommentRepository
@@ -91,6 +96,20 @@ class Container(containers.DeclarativeContainer):
         key="instagram:replies",
         limit=settings.instagram.replies_rate_limit_per_hour,
         period=settings.instagram.replies_rate_period_seconds,
+        owns_connection=False,
+    )
+
+    youtube_rate_limit_redis = providers.Singleton(
+        redis_async.Redis.from_url,
+        settings.youtube.rate_limit_redis_url,
+    )
+
+    youtube_rate_limiter = providers.Singleton(
+        RedisRateLimiter,
+        redis_client=youtube_rate_limit_redis,
+        key="youtube:comments",
+        limit=500,  # placeholder; tune to match quotas
+        period=60,
         owns_connection=False,
     )
 
@@ -160,6 +179,14 @@ class Container(containers.DeclarativeContainer):
         MediaAnalysisService,
     )
 
+    youtube_service = providers.Singleton(
+        YouTubeService,
+    )
+    youtube_media_service = providers.Factory(
+        YouTubeMediaService,
+        youtube_service=youtube_service,
+    )
+
     media_proxy_service = providers.Singleton(
         MediaProxyService,
         timeout_seconds=settings.media_proxy.request_timeout_seconds,
@@ -200,7 +227,7 @@ class Container(containers.DeclarativeContainer):
         comment_repository_factory=comment_repository_factory.provider,
         classification_repository_factory=classification_repository_factory.provider,
         classification_service=classification_service,
-        media_service=media_service,
+        media_service=youtube_media_service,
     )
 
     generate_answer_use_case = providers.Factory(
@@ -279,6 +306,30 @@ class Container(containers.DeclarativeContainer):
         # session is injected at runtime
         media_repository_factory=media_repository_factory.provider,
         analysis_service=media_analysis_service,
+    )
+
+    poll_youtube_comments_use_case = providers.Factory(
+        PollYouTubeCommentsUseCase,
+        # session is injected at runtime
+        youtube_service=youtube_service,
+        youtube_media_service=youtube_media_service,
+        task_queue=task_queue,
+        comment_repository_factory=comment_repository_factory.provider,
+        media_repository_factory=media_repository_factory.provider,
+        classification_repository_factory=classification_repository_factory.provider,
+    )
+
+    send_youtube_reply_use_case = providers.Factory(
+        SendYouTubeReplyUseCase,
+        youtube_service=youtube_service,
+        comment_repository_factory=comment_repository_factory.provider,
+        answer_repository_factory=answer_repository_factory.provider,
+    )
+
+    delete_youtube_comment_use_case = providers.Factory(
+        DeleteYouTubeCommentUseCase,
+        youtube_service=youtube_service,
+        comment_repository_factory=comment_repository_factory.provider,
     )
 
     process_document_use_case = providers.Factory(

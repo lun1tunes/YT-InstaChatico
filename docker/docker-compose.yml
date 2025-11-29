@@ -1,11 +1,11 @@
-name: instachatico-app
+name: yt-instachatico-app-stack
 
 services:
   postgres:
     image: pgvector/pgvector:pg15
-    container_name: instagram_postgres
+    container_name: yt_app_postgres
     labels:
-      - "project=instachatico-app"
+      - "project=yt-instachatico-app"
       - "service=postgres"
     env_file:
       - .env
@@ -17,10 +17,10 @@ services:
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
-      - instachatico_postgres_data:/var/lib/postgresql/data
+      - yt_instachatico_postgres_data:/var/lib/postgresql/data
       - ../database/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
-      - instagram_network
+      - yt_app_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} && psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -tAc \"SELECT 1 FROM pg_extension WHERE extname='vector'\" | grep -q 1"]
       interval: 10s
@@ -46,18 +46,18 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: instagram_redis
+    container_name: yt_app_redis
     labels:
-      - "project=instachatico-app"
+      - "project=yt-instachatico-app"
       - "service=redis"
     ports:
-      - "${REDIS_HOST_INTERFACE:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+      - "${REDIS_HOST_INTERFACE:-127.0.0.1}:${REDIS_PORT:-6381}:6379"
     volumes:
-      - instachatico_redis_data:/data
+      - yt_instachatico_redis_data:/data
       - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - ./config/redis/entrypoint.sh:/docker-entrypoint.d/10-custom-entrypoint.sh:ro
     networks:
-      - instagram_network
+      - yt_app_network
     environment:
       - LOGS_LEVEL=${LOGS_LEVEL:-INFO}
       - LOGS_LEVEL_REDIS=${LOGS_LEVEL_REDIS:-}
@@ -72,9 +72,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: instagram_api
+    container_name: yt_app_api
     labels:
-      - "project=instachatico-app"
+      - "project=yt-instachatico-app"
       - "service=api"
     env_file:
       - .env
@@ -83,19 +83,20 @@ services:
     volumes:
       - ../src:/app/src
       - ../database:/app/database
-      - instachatico_conversations_data:/app/src/conversations
+      - yt_instachatico_conversations_data:/app/src/conversations
     environment:
       # Override Redis connection for Docker networking
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - INSTAGRAM_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
+      - YOUTUBE_RATE_LIMIT_REDIS_URL=redis://redis:6379/2
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - instagram_network
+      - yt_app_network
     command: sh -c "cd /app/database && alembic upgrade head && cd /app/src && uvicorn main:app --host 0.0.0.0 --port ${PORT:-4291} --reload"
     security_opt:
       - no-new-privileges:true
@@ -104,29 +105,30 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: instagram_celery_worker
+    container_name: yt_app_celery_worker
     labels:
-      - "project=instachatico-app"
+      - "project=yt-instachatico-app"
       - "service=celery_worker"
     env_file:
       - .env
     volumes:
       - ../src:/app/src
       - ../database:/app/database
-      - instachatico_conversations_data:/app/src/conversations
+      - yt_instachatico_conversations_data:/app/src/conversations
     environment:
       # Override Redis connection for Docker networking
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - INSTAGRAM_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
+      - YOUTUBE_RATE_LIMIT_REDIS_URL=redis://redis:6379/2
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - instagram_network
-    command: sh -c "cd /app/src && python -c 'import celery_worker' && celery -A celery_worker worker --loglevel=${LOGS_LEVEL_CELERY:-${LOGS_LEVEL:-INFO}} --concurrency=4 --without-gossip --without-mingle --without-heartbeat -Q llm_queue,instagram_queue"
+      - yt_app_network
+    command: sh -c "cd /app/src && python -c 'import celery_worker' && celery -A celery_worker worker --loglevel=${LOGS_LEVEL_CELERY:-${LOGS_LEVEL:-INFO}} --concurrency=4 --without-gossip --without-mingle --without-heartbeat -Q llm_queue,youtube_queue,instagram_queue"
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -141,38 +143,39 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: instagram_celery_beat
+    container_name: yt_app_celery_beat
     labels:
-      - "project=instachatico-app"
+      - "project=yt-instachatico-app"
       - "service=celery_beat"
     env_file:
       - .env
     volumes:
       - ../src:/app/src
       - ../database:/app/database
-      - instachatico_conversations_data:/app/src/conversations
-      - instachatico_celerybeat_schedule:/app/celerybeat
+      - yt_instachatico_conversations_data:/app/src/conversations
+      - yt_instachatico_celerybeat_schedule:/app/celerybeat
     environment:
       # Override Redis connection for Docker networking
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - INSTAGRAM_RATE_LIMIT_REDIS_URL=redis://redis:6379/1
+      - YOUTUBE_RATE_LIMIT_REDIS_URL=redis://redis:6379/2
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - instagram_network
+      - yt_app_network
     command: sh -c "mkdir -p /app/celerybeat && cd /app/src && celery -A celery_worker beat --loglevel=${LOGS_LEVEL_CELERY:-${LOGS_LEVEL:-INFO}} -s /app/celerybeat/celerybeat-schedule"
     security_opt:
       - no-new-privileges:true
 
   dozzle:
     image: amir20/dozzle:latest
-    container_name: instagram_dozzle
+    container_name: yt_app_dozzle
     labels:
-      - "project=instachatico-app"
+      - "project=yt-instachatico-app"
       - "service=dozzle"
     ports:
       - "57928:8080"
@@ -180,28 +183,32 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config/dozzle/users.yml:/data/users.yml:ro
     networks:
-      - instagram_network
+      - yt_app_network
     environment:
       - DOZZLE_NO_ANALYTICS=true
       - DOZZLE_AUTH_PROVIDER=simple
     restart: unless-stopped
 
 volumes:
-  instachatico_postgres_data:
+  yt_instachatico_postgres_data:
     driver: local
-    name: instachatico_postgres_data
-  instachatico_redis_data:
+    name: yt_instachatico_postgres_data
+  yt_instachatico_redis_data:
     driver: local
-    name: instachatico_redis_data
-  instachatico_conversations_data:
+    name: yt_instachatico_redis_data
+  yt_instachatico_conversations_data:
     driver: local
-    name: instachatico_conversations_data
-  instachatico_celerybeat_schedule:
+    name: yt_instachatico_conversations_data
+  yt_instachatico_celerybeat_schedule:
     driver: local
-    name: instachatico_celerybeat_schedule
 
 networks:
-  instagram_network:
+  yt_app_network:
+    name: yt_app_network
+    name: yt_instachatico_celerybeat_schedule
+
+networks:
+  yt_instagram_network:
     driver: bridge
-    name: instachatico-network  
+    name: yt-instachatico-network  
     

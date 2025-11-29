@@ -225,6 +225,41 @@ class IMediaService(Protocol):
         ...
 
 
+class IYouTubeService(Protocol):
+    """Protocol for YouTube Data API interactions (comments/videos)."""
+
+    async def list_channel_videos(
+        self,
+        channel_id: Optional[str] = None,
+        page_token: Optional[str] = None,
+        max_results: int = 50,
+    ) -> dict:
+        """List videos for a channel (used for polling new content)."""
+        ...
+
+    async def list_comment_threads(
+        self,
+        video_id: str,
+        page_token: Optional[str] = None,
+        max_results: int = 50,
+        order: str = "time",
+    ) -> dict:
+        """Fetch top-level comment threads for a video (includes replies if available)."""
+        ...
+
+    async def reply_to_comment(self, parent_id: str, text: str) -> dict:
+        """Post a reply to an existing comment."""
+        ...
+
+    async def delete_comment(self, comment_id: str) -> None:
+        """Delete a comment."""
+        ...
+
+    async def get_video_details(self, video_id: str) -> dict:
+        """Fetch video metadata/context (title, description, thumbnails, stats)."""
+        ...
+
+
 class IMediaAnalysisService(Protocol):
     """Protocol for media analysis services (AI vision)."""
 

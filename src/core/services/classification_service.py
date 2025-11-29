@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class CommentClassificationService(BaseService):
-    """Classify Instagram comments using OpenAI Agents SDK with persistent sessions."""
+    """Classify YouTube video comments using OpenAI Agents SDK with persistent sessions."""
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class CommentClassificationService(BaseService):
                 {
                     "role": "system",
                     "content": (
-                        "📋 MEDIA CONTEXT (Post Information):\n"
+                        "📋 MEDIA CONTEXT (YouTube Video):\n"
                         f"{media_description}\n\nUse this context when analyzing comments and generating responses."
                     ),
                 }
@@ -59,51 +59,39 @@ class CommentClassificationService(BaseService):
         """Format media context into readable description."""
         description_parts = []
 
-        # Basic media info
-        media_type = media_context.get("media_type")
-        if media_type:
-            # Add carousel info if present
-            if media_type == "CAROUSEL_ALBUM" and media_context.get("children_media_urls"):
-                num_images = len(media_context["children_media_urls"])
-                description_parts.append(f"Post Type: CAROUSEL_ALBUM ({num_images} изображений)")
-            else:
-                description_parts.append(f"Post Type: {media_type}")
+        title = media_context.get("title") or media_context.get("caption")
+        if title:
+            description_parts.append(f"Название видео: {title}")
 
-        if media_context.get("username"):
-            description_parts.append(f"Author: @{media_context['username']}")
+        channel = media_context.get("username") or media_context.get("channel_title")
+        if channel:
+            description_parts.append(f"Канал: {channel}")
 
-        # Post content
         if media_context.get("caption"):
             caption = media_context["caption"]
-            # Truncate long captions but keep important info
             if len(caption) > 500:
                 caption = caption[:500] + "..."
-            description_parts.append(f"Post Caption: {caption}")
-
-        if media_context.get("media_url"):
-            description_parts.append(f"Media URL: {media_context['media_url']}")
-
-        # Engagement metrics
-        engagement_parts = []
-        if media_context.get("comments_count") is not None:
-            engagement_parts.append(f"{media_context['comments_count']} comments")
-        if media_context.get("like_count") is not None:
-            engagement_parts.append(f"{media_context['like_count']} likes")
-
-        if engagement_parts:
-            description_parts.append(f"Engagement: {', '.join(engagement_parts)}")
-
-        # Additional context
-        if media_context.get("is_comment_enabled") is not None:
-            status = "enabled" if media_context["is_comment_enabled"] else "disabled"
-            description_parts.append(f"Comments: {status}")
+            description_parts.append(f"Описание: {caption}")
 
         if media_context.get("permalink"):
-            description_parts.append(f"Post URL: {media_context['permalink']}")
+            description_parts.append(f"Ссылка на видео: {media_context['permalink']}")
 
-        # NOTE: Business documents are NOT used in classification
-        # They are only used in answer generation (see answer_tasks.py)
-        # Classification only needs media context to categorize comments
+        if media_context.get("media_url"):
+            description_parts.append(f"Превью: {media_context['media_url']}")
+
+        if media_context.get("posted_at"):
+            description_parts.append(f"Опубликовано: {media_context['posted_at']}")
+
+        engagement_parts = []
+        if media_context.get("comments_count") is not None:
+            engagement_parts.append(f"{media_context['comments_count']} комментариев")
+        if media_context.get("like_count") is not None:
+            engagement_parts.append(f"{media_context['like_count']} отметок \"нравится\"")
+        if media_context.get("view_count") is not None:
+            engagement_parts.append(f"{media_context['view_count']} просмотров")
+
+        if engagement_parts:
+            description_parts.append(f"Статистика: {', '.join(engagement_parts)}")
 
         return "\n".join(description_parts)
 

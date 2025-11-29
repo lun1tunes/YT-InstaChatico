@@ -15,7 +15,7 @@ MAX_RETRIES = len(DEFAULT_RETRY_SCHEDULE)
 @celery_app.task(bind=True, max_retries=MAX_RETRIES)
 @async_task
 async def generate_answer_task(self, comment_id: str):
-    """Generate answer for Instagram comment question - orchestration only."""
+    """Generate answer for YouTube comment question - orchestration only."""
     logger.info(f"Task started | comment_id={comment_id} | retry={self.request.retries}/{self.max_retries}")
 
     async with get_db_session() as session:
@@ -41,7 +41,7 @@ async def generate_answer_task(self, comment_id: str):
             try:
                 task_queue = container.task_queue()
                 task_id = task_queue.enqueue(
-                    "core.tasks.instagram_reply_tasks.send_instagram_reply_task",
+                    "core.tasks.youtube_tasks.send_youtube_reply_task",
                     comment_id,
                     result["answer"],
                 )

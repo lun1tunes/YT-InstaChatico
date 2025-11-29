@@ -1,7 +1,7 @@
 """Use case for comment classification (Business Logic Layer)."""
 
 import logging
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -219,14 +219,31 @@ class ClassifyCommentUseCase:
 
     def _build_media_context(self, media) -> Dict[str, Any]:
         """Build media context dictionary."""
+        raw_snippet = {}
+        raw_stats = {}
+        if getattr(media, "raw_data", None):
+            raw_snippet = media.raw_data.get("snippet", {}) or {}
+            raw_stats = media.raw_data.get("statistics", {}) or {}
+
         return {
             "caption": media.caption,
+            "title": raw_snippet.get("title"),
+            "channel_title": raw_snippet.get("channelTitle"),
             "media_type": media.media_type,
             "media_context": media.media_context,
             "username": media.username,
             "comments_count": media.comments_count,
             "like_count": media.like_count,
+            "view_count": _safe_int(raw_stats.get("viewCount")),
             "permalink": media.permalink,
             "media_url": media.media_url,
             "is_comment_enabled": media.is_comment_enabled,
+            "posted_at": media.posted_at,
         }
+
+
+def _safe_int(value) -> Optional[int]:
+    try:
+        return int(value)
+    except Exception:
+        return None

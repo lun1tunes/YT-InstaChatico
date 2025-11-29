@@ -177,6 +177,31 @@ class S3Settings(BaseSettings):
         return self
 
 
+class YouTubeSettings(BaseModel):
+    """YouTube Data API / OAuth settings."""
+
+    client_id: str = Field(default_factory=lambda: os.getenv("YOUTUBE_CLIENT_ID", "").strip())
+    client_secret: str = Field(default_factory=lambda: os.getenv("YOUTUBE_CLIENT_SECRET", "").strip())
+    refresh_token: str = Field(default_factory=lambda: os.getenv("YOUTUBE_REFRESH_TOKEN", "").strip())
+    api_key: str = Field(default_factory=lambda: os.getenv("YOUTUBE_API_KEY", "").strip())
+    channel_id: str = Field(default_factory=lambda: os.getenv("YOUTUBE_CHANNEL_ID", "").strip())
+    poll_interval_seconds: int = Field(default_factory=lambda: int(os.getenv("YOUTUBE_POLL_INTERVAL_SECONDS", "30")))
+    rate_limit_redis_url: str = Field(default_factory=lambda: os.getenv("YOUTUBE_RATE_LIMIT_REDIS_URL", "redis://localhost:6379/2"))
+
+    @model_validator(mode="after")
+    def _validate(self) -> Self:
+        missing = []
+        if not self.client_id:
+            missing.append("YOUTUBE_CLIENT_ID")
+        if not self.client_secret:
+            missing.append("YOUTUBE_CLIENT_SECRET")
+        if not self.refresh_token:
+            missing.append("YOUTUBE_REFRESH_TOKEN")
+        if missing:
+            raise ValueError(f"YouTube OAuth configuration missing required environment variables: {', '.join(missing)}.")
+        return self
+
+
 class RelaxedEnvSettingsSource(EnvSettingsSource):
     def decode_complex_value(self, field_name, field, value):
         try:
@@ -203,6 +228,7 @@ class Settings(BaseSettings):
     json_api: JsonApiSettings = JsonApiSettings()
     s3: S3Settings = S3Settings()
     media_proxy: MediaProxySettings = MediaProxySettings()
+    youtube: YouTubeSettings = YouTubeSettings()
 
     @model_validator(mode="after")
     def _validate(self) -> Self:

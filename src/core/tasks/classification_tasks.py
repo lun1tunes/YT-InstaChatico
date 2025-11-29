@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = len(DEFAULT_RETRY_SCHEDULE)
 
 ANSWER_QUEUE_CLASSIFICATIONS = {"question / inquiry"}
-HIDE_QUEUE_CLASSIFICATIONS = {"urgent issue / complaint", "toxic / abusive", "critical feedback"}
+DELETE_QUEUE_CLASSIFICATIONS = {"urgent issue / complaint", "toxic / abusive", "critical feedback"}
 TELEGRAM_QUEUE_CLASSIFICATIONS = {"urgent issue / complaint", "critical feedback", "partnership proposal"}
 
 
@@ -75,17 +75,17 @@ async def _trigger_post_classification_actions(classification_result: dict):
         except Exception as e:
             logger.error(f"Failed to queue answer task | comment_id={comment_id} | error={str(e)}", exc_info=True)
 
-    # Hide toxic/complaint comments
-    if classification in HIDE_QUEUE_CLASSIFICATIONS:
-        logger.info(f"Queuing hide task | comment_id={comment_id} | classification={classification}")
+    # Delete toxic/complaint comments (YouTube)
+    if classification in DELETE_QUEUE_CLASSIFICATIONS:
+        logger.info(f"Queuing delete task | comment_id={comment_id} | classification={classification}")
         try:
             task_id = task_queue.enqueue(
-                "core.tasks.instagram_reply_tasks.hide_instagram_comment_task",
+                "core.tasks.youtube_tasks.delete_youtube_comment_task",
                 comment_id,
             )
-            logger.debug(f"Hide task queued | task_id={task_id} | comment_id={comment_id}")
+            logger.debug(f"Delete task queued | task_id={task_id} | comment_id={comment_id}")
         except Exception as e:
-            logger.error(f"Failed to queue hide task | comment_id={comment_id} | error={str(e)}", exc_info=True)
+            logger.error(f"Failed to queue delete task | comment_id={comment_id} | error={str(e)}", exc_info=True)
 
     # Telegram notifications (excluding toxic)
     if classification in TELEGRAM_QUEUE_CLASSIFICATIONS:
