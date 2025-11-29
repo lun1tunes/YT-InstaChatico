@@ -165,12 +165,25 @@ class YouTubeService:
         return await self._execute(_call)
 
     async def _execute(self, call):
-        """Execute Google API call with uniform error handling."""
-        try:
-            return await self._run(call)
-        except HttpError as http_err:
-            logger.error("YouTube API error: %s | status=%s", http_err, getattr(http_err, "status_code", None))
-            raise
-        except Exception as exc:  # noqa: BLE001
-            logger.error("YouTube service unexpected error: %s", exc, exc_info=True)
-            raise
+        """Execute Google API call with uniform error handling and simple backoff."""
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                return await self._run(call)
+            except HttpError as http_err:
+                status = getattr(http_err, "status_code", None) or getattr(http_err, "resp", None)
+                logger.error("YouTube API error: %s | status=%s", http_err, status)
+                if hasattr(http_err, "error_details") and http_err.error_details:
+                    logger.error("YouTube error details: %s", http_err.error_details)
+                # Basic quota/backoff handling
+                if getattr(http_err, "res", None) and getattr(http_err.res, "status", None) == 403:
+                    # Small exponential backoff
+                    delay = min(30, 2 ** attempt)
+                    logger.warning("Quota or permission error, backing off for %ss (attempt %s)", delay, attempt)
+                    await asyncio.sleep(delay)
+                    continue
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.error("YouTube service unexpected error: %s", exc, exc_info=True)
+                raise

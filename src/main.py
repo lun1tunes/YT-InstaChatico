@@ -83,9 +83,10 @@ async def verify_webhook_signature(request: Request, call_next):
     incoming_trace = request.headers.get("X-Trace-Id")
     trace_id = incoming_trace or str(uuid.uuid4())
     token = trace_id_ctx.set(trace_id)
-    # Check if this is a POST request to the webhook endpoint (with or without trailing slash)
+    # Instagram webhook verification (skip when Instagram token not configured)
     webhook_path = "/api/v1/webhook"
-    if request.method == "POST" and request.url.path.rstrip("/") == webhook_path:
+    instagram_enabled = bool(settings.instagram.access_token)
+    if instagram_enabled and request.method == "POST" and request.url.path.rstrip("/") == webhook_path:
         # Instagram uses X-Hub-Signature-256 (SHA256) instead of X-Hub-Signature (SHA1)
         signature_256 = request.headers.get("X-Hub-Signature-256")
         signature_1 = request.headers.get("X-Hub-Signature")

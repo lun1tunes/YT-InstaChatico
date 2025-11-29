@@ -187,6 +187,7 @@ class YouTubeSettings(BaseModel):
     api_key: str = Field(default_factory=lambda: os.getenv("YOUTUBE_API_KEY", "").strip())
     channel_id: str = Field(default_factory=lambda: os.getenv("YOUTUBE_CHANNEL_ID", "").strip())
     poll_interval_seconds: int = Field(default_factory=lambda: int(os.getenv("YOUTUBE_POLL_INTERVAL_SECONDS", "30")))
+    poll_max_videos: int = Field(default_factory=lambda: int(os.getenv("YOUTUBE_POLL_MAX_VIDEOS", "10")))
     rate_limit_redis_url: str = Field(default_factory=lambda: os.getenv("YOUTUBE_RATE_LIMIT_REDIS_URL", "redis://localhost:6379/2"))
 
     @model_validator(mode="after")

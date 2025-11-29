@@ -8,6 +8,7 @@ from typing import Callable, Optional, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import settings
 from core.interfaces.services import IYouTubeService
 from core.repositories.comment import CommentRepository
 from core.repositories.media import MediaRepository
@@ -56,6 +57,7 @@ class PollYouTubeCommentsUseCase:
         page_token: Optional[str] = None,
     ) -> dict:
         """Poll comments for provided videos or latest channel uploads."""
+        poll_started = now_db_utc()
         try:
             videos = list(video_ids) if video_ids else await self._fetch_recent_video_ids(channel_id, page_token)
         except Exception as exc:  # noqa: BLE001
@@ -63,17 +65,41 @@ class PollYouTubeCommentsUseCase:
             return {"status": "error", "reason": str(exc)}
 
         new_comments = 0
+        api_errors = 0
         for video_id in videos:
             media = await self.youtube_media_service.get_or_create_video(video_id, self.session)
             if not media:
                 continue
-            fetched = await self._process_video_comments(video_id)
+            try:
+                fetched = await self._process_video_comments(video_id)
+            except Exception as exc:  # noqa: BLE001
+                api_errors += 1
+                logger.error("Failed processing comments | video_id=%s | error=%s", video_id, exc)
+                continue
             new_comments += fetched
 
-        return {"status": "success", "video_count": len(videos), "new_comments": new_comments}
+        duration = (now_db_utc() - poll_started).total_seconds()
+        logger.info(
+            "YouTube poll finished | videos=%s | new_comments=%s | api_errors=%s | duration=%.2fs",
+            len(videos),
+            new_comments,
+            api_errors,
+            duration,
+        )
+        return {
+            "status": "success",
+            "video_count": len(videos),
+            "new_comments": new_comments,
+            "api_errors": api_errors,
+            "duration_seconds": duration,
+        }
 
     async def _fetch_recent_video_ids(self, channel_id: Optional[str], page_token: Optional[str]) -> list[str]:
-        resp = await self.youtube_service.list_channel_videos(channel_id=channel_id, page_token=page_token)
+        resp = await self.youtube_service.list_channel_videos(
+            channel_id=channel_id,
+            page_token=page_token,
+            max_results=settings.youtube.poll_max_videos,
+        )
         ids: list[str] = []
         for item in resp.get("items", []):
             id_block = item.get("id", {})
@@ -85,22 +111,32 @@ class PollYouTubeCommentsUseCase:
     async def _process_video_comments(self, video_id: str) -> int:
         page_token = None
         added = 0
+        latest_seen = await self.comment_repo.get_latest_comment_timestamp(video_id)
         while True:
             resp = await self.youtube_service.list_comment_threads(video_id=video_id, page_token=page_token)
             threads = resp.get("items", [])
             for thread in threads:
-                added += await self._persist_thread(thread, video_id)
+                stop_early, created = await self._persist_thread(thread, video_id, latest_seen)
+                added += created
+                if stop_early:
+                    return added
 
             page_token = resp.get("nextPageToken")
             if not page_token:
                 break
         return added
 
-    async def _persist_thread(self, thread: dict, video_id: str) -> int:
+    async def _persist_thread(self, thread: dict, video_id: str, latest_seen: Optional[datetime]) -> tuple[bool, int]:
         top = thread.get("snippet", {}).get("topLevelComment", {})
         top_snippet = top.get("snippet", {}) if top else {}
         top_id = top.get("id")
         added = 0
+        stop_early = False
+
+        published_at_str = top_snippet.get("publishedAt")
+        published_at = _parse_datetime(published_at_str) if published_at_str else None
+        if latest_seen and published_at and published_at <= latest_seen:
+            return True, 0
 
         if top_id:
             created = await self._persist_comment(
@@ -117,6 +153,11 @@ class PollYouTubeCommentsUseCase:
             reply_snippet = reply.get("snippet", {})
             reply_id = reply.get("id")
             if reply_id:
+                reply_published_str = reply_snippet.get("publishedAt")
+                reply_published = _parse_datetime(reply_published_str) if reply_published_str else None
+                if latest_seen and reply_published and reply_published <= latest_seen:
+                    stop_early = True
+                    continue
                 created = await self._persist_comment(
                     comment_id=reply_id,
                     video_id=video_id,
@@ -126,7 +167,7 @@ class PollYouTubeCommentsUseCase:
                 )
                 added += int(created)
 
-        return added
+        return stop_early, added
 
     async def _persist_comment(
         self,
