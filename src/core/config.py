@@ -67,7 +67,8 @@ class InstagramSettings(BaseModel):
     @model_validator(mode="after")
     def _validate(self) -> Self:
         if not self.access_token:
-            raise ValueError("INSTA_TOKEN environment variable must be set.")
+            # Optional for YouTube-only deployments; log-friendly error
+            self.access_token = ""
         return self
 
 

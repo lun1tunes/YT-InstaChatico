@@ -254,10 +254,10 @@ class Container(containers.DeclarativeContainer):
     )
 
     delete_comment_use_case = providers.Factory(
-        DeleteCommentUseCase,
+        DeleteYouTubeCommentUseCase,
         # session is injected at runtime
         comment_repository_factory=comment_repository_factory.provider,
-        instagram_service=instagram_service,
+        youtube_service=youtube_service,
     )
 
     replace_answer_use_case = providers.Factory(

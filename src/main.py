@@ -56,16 +56,9 @@ async def lifespan(app: FastAPI):
         settings.cors_allow_credentials,
     )
 
-    from core.container import get_container
-    container = get_container()
-    instagram_service = container.instagram_service()
-    logger.info("Instagram service initialized")
-
     yield
 
     logger.info("Application shutting down...")
-    await instagram_service.close()
-    logger.info("Instagram service session closed")
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)

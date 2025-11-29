@@ -25,8 +25,7 @@ from core.repositories.media import MediaRepository
 from core.repositories.classification import ClassificationRepository
 from core.repositories.expired_token import ExpiredTokenRepository
 from core.models.comment_classification import CommentClassification, ProcessingStatus
-from core.use_cases.hide_comment import HideCommentUseCase
-from core.use_cases.delete_comment import DeleteCommentUseCase
+from core.use_cases.delete_youtube_comment import DeleteYouTubeCommentUseCase
 from core.dependencies import get_container
 from sqlalchemy import update
 from api_v1.comments.serializers import (
@@ -569,7 +568,7 @@ async def delete_comment(
     session: AsyncSession = Depends(db_helper.scoped_session_dependency),
 ):
     container = get_container()
-    use_case: DeleteCommentUseCase = container.delete_comment_use_case(session=session)
+    use_case: DeleteYouTubeCommentUseCase = container.delete_comment_use_case(session=session)
     result = await use_case.execute(comment_id, initiator="manual")
     status = result.get("status")
     if status == "error":
@@ -584,15 +583,21 @@ async def delete_comment(
 async def patch_comment_visibility(
     _: None = Depends(require_service_token),
     comment_id: str = Path(..., alias="id"),
-    is_hidden: bool = Query(..., description="True to hide the comment, False to unhide"),
+    is_hidden: bool = Query(..., description="True will delete the comment on YouTube; unhide is not supported"),
     session: AsyncSession = Depends(db_helper.scoped_session_dependency),
 ):
-    hide = bool(is_hidden)
+    """
+    For YouTube we cannot hide/unhide comments.
+    When is_hidden=True we perform a delete via YouTube API; otherwise we return 400.
+    """
+    if not is_hidden:
+        raise JsonApiError(400, 4008, "Unhide is not supported for YouTube comments")
+
     container = get_container()
-    use_case: HideCommentUseCase = container.hide_comment_use_case(session=session)
-    result = await use_case.execute(comment_id, hide=hide, initiator="manual")
+    use_case: DeleteYouTubeCommentUseCase = container.delete_comment_use_case(session=session)
+    result = await use_case.execute(comment_id, initiator="manual")
     if result.get("status") == "error":
-        raise JsonApiError(502, 5003, "Failed to update comment visibility")
+        raise JsonApiError(502, 5003, "Failed to delete YouTube comment")
 
     comment = await _get_comment_or_404(session, comment_id)
     return CommentResponse(meta=SimpleMeta(), payload=serialize_comment(comment))

@@ -100,6 +100,7 @@ celery_app.conf.beat_schedule = {
         "task": "core.tasks.health_tasks.check_system_health_task",
         "schedule": crontab(minute=0, hour="*"),
     },
+    # Instagram follower snapshot retained for compatibility; keep disabled if not needed
     "record-instagram-followers": {
         "task": "core.tasks.stats_tasks.record_follower_snapshot_task",
         # enable_utc=True ensures this executes at 00:00 UTC
