@@ -189,6 +189,7 @@ class YouTubeSettings(BaseModel):
     poll_interval_seconds: int = Field(default_factory=lambda: int(os.getenv("YOUTUBE_POLL_INTERVAL_SECONDS", "30")))
     poll_max_videos: int = Field(default_factory=lambda: int(os.getenv("YOUTUBE_POLL_MAX_VIDEOS", "10")))
     rate_limit_redis_url: str = Field(default_factory=lambda: os.getenv("YOUTUBE_RATE_LIMIT_REDIS_URL", "redis://localhost:6379/2"))
+    redirect_uri: str = Field(default_factory=lambda: os.getenv("YOUTUBE_REDIRECT_URI", "http://localhost:5291/api/v1/auth/google/callback").strip())
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
@@ -199,6 +200,8 @@ class YouTubeSettings(BaseModel):
             missing.append("YOUTUBE_CLIENT_SECRET")
         if not self.refresh_token:
             missing.append("YOUTUBE_REFRESH_TOKEN")
+        if not self.redirect_uri:
+            missing.append("YOUTUBE_REDIRECT_URI")
         if missing:
             raise ValueError(f"YouTube OAuth configuration missing required environment variables: {', '.join(missing)}.")
         return self
