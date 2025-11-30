@@ -15,6 +15,7 @@ __all__ = (
     "StatsReport",
     "ModerationStatsReport",
     "FollowersDynamic",
+    "OAuthToken",
 )
 
 from .base import Base
@@ -30,3 +31,4 @@ from .instrument_token_usage import InstrumentTokenUsage
 from .stats_report import StatsReport
 from .moderation_stats_report import ModerationStatsReport
 from .followers_dynamic import FollowersDynamic
+from .oauth_token import OAuthToken

@@ -13,6 +13,7 @@ from googleapiclient.discovery import build, Resource
 from googleapiclient.errors import HttpError
 
 from core.config import settings
+from core.utils.task_helpers import get_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +31,40 @@ class YouTubeService:
         refresh_token: Optional[str] = None,
         api_key: Optional[str] = None,
         channel_id: Optional[str] = None,
+        token_service_factory: Optional[Callable[..., Any]] = None,
+        session_factory: Optional[Callable[..., Any]] = None,
     ) -> None:
         self.client_id = client_id or settings.youtube.client_id
         self.client_secret = client_secret or settings.youtube.client_secret
         self.refresh_token = refresh_token or settings.youtube.refresh_token
         self.api_key = api_key or settings.youtube.api_key
         self.channel_id = channel_id or settings.youtube.channel_id
+        self.token_service_factory = token_service_factory
+        self.session_factory = session_factory
         self._credentials: Credentials | None = None
         self._youtube: Resource | None = None
+        self._account_id = self.channel_id or "default"
 
     # ------------------------------------------------------------------ #
     # Internal helpers
     # ------------------------------------------------------------------ #
-    def _build_credentials(self) -> Credentials:
-        creds = Credentials(
+    async def _build_credentials(self) -> Credentials:
+        """
+        Build credentials from stored OAuth tokens if available; fallback to env.
+        """
+        tokens = await self._load_tokens()
+        if tokens:
+            return Credentials(
+                tokens.get("access_token"),
+                refresh_token=tokens.get("refresh_token"),
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                scopes=[YOUTUBE_SCOPE],
+                expiry=tokens.get("expires_at"),
+            )
+
+        return Credentials(
             None,
             refresh_token=self.refresh_token,
             token_uri="https://oauth2.googleapis.com/token",
@@ -51,16 +72,16 @@ class YouTubeService:
             client_secret=self.client_secret,
             scopes=[YOUTUBE_SCOPE],
         )
-        return creds
 
-    def _get_youtube(self) -> Resource:
+    async def _get_youtube(self) -> Resource:
         if self._credentials is None:
-            self._credentials = self._build_credentials()
+            self._credentials = await self._build_credentials()
 
         # Refresh if needed
         if not self._credentials.valid:
             try:
                 self._credentials.refresh(Request())
+                await self._persist_refreshed_tokens()
             except Exception as exc:  # noqa: BLE001
                 logger.error("Failed to refresh YouTube credentials: %s", exc, exc_info=True)
                 raise
@@ -74,6 +95,40 @@ class YouTubeService:
         """Run blocking Google client calls in a thread."""
         return await asyncio.to_thread(func, *args, **kwargs)
 
+    async def _load_tokens(self) -> Optional[dict]:
+        """Load tokens from secure storage if configured."""
+        if not self.token_service_factory or not self.session_factory:
+            return None
+        try:
+            async with get_db_session() as session:
+                token_service = self.token_service_factory(session=session)
+                return await token_service.get_tokens("google", self._account_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to load stored OAuth tokens | error=%s", exc)
+            return None
+
+    async def _persist_refreshed_tokens(self) -> None:
+        """Persist refreshed access token if storage is configured."""
+        if not self.token_service_factory or not self.session_factory or not self._credentials:
+            return
+        # Only persist if we have a refresh token (either stored or env)
+        refresh_token = self._credentials.refresh_token or self.refresh_token
+        if not refresh_token:
+            return
+        expires_at = self._credentials.expiry
+        try:
+            async with get_db_session() as session:
+                token_service = self.token_service_factory(session=session)
+                await token_service.update_access_token(
+                    provider="google",
+                    account_id=self._account_id,
+                    access_token=self._credentials.token,
+                    expires_at=expires_at,
+                    refresh_token=refresh_token,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to persist refreshed OAuth tokens | error=%s", exc)
+
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
@@ -84,7 +139,7 @@ class YouTubeService:
         max_results: int = 50,
     ) -> dict:
         """List videos for a channel (latest first)."""
-        youtube = self._get_youtube()
+        youtube = await self._get_youtube()
 
         def _call():
             return (
@@ -110,7 +165,7 @@ class YouTubeService:
         order: str = "time",
     ) -> dict:
         """Fetch top-level comment threads (includes replies summary)."""
-        youtube = self._get_youtube()
+        youtube = await self._get_youtube()
 
         def _call():
             return (
@@ -130,7 +185,7 @@ class YouTubeService:
 
     async def reply_to_comment(self, parent_id: str, text: str) -> dict:
         """Post a reply to an existing comment."""
-        youtube = self._get_youtube()
+        youtube = await self._get_youtube()
 
         body = {"snippet": {"parentId": parent_id, "textOriginal": text}}
 
@@ -141,7 +196,7 @@ class YouTubeService:
 
     async def delete_comment(self, comment_id: str) -> None:
         """Delete a comment (moderation action)."""
-        youtube = self._get_youtube()
+        youtube = await self._get_youtube()
 
         def _call():
             return youtube.comments().delete(id=comment_id).execute()
@@ -150,7 +205,7 @@ class YouTubeService:
 
     async def get_video_details(self, video_id: str) -> dict:
         """Fetch video metadata + stats for media context."""
-        youtube = self._get_youtube()
+        youtube = await self._get_youtube()
 
         def _call():
             return (

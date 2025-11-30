@@ -41,7 +41,7 @@ async def generate_answer_task(self, comment_id: str):
             try:
                 task_queue = container.task_queue()
                 task_id = task_queue.enqueue(
-                    "core.tasks.youtube_tasks.send_youtube_reply_task",
+                    "core.tasks.instagram_reply_tasks.send_instagram_reply_task",
                     comment_id,
                     result["answer"],
                 )

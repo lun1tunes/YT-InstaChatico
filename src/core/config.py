@@ -234,6 +234,7 @@ class Settings(BaseSettings):
     s3: S3Settings = S3Settings()
     media_proxy: MediaProxySettings = MediaProxySettings()
     youtube: YouTubeSettings = YouTubeSettings()
+    oauth_encryption_key: str = Field(default_factory=lambda: os.getenv("OAUTH_ENCRYPTION_KEY", "").strip())
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
@@ -241,6 +242,8 @@ class Settings(BaseSettings):
             raise ValueError("APP_SECRET environment variable must be set.")
         if not self.app_webhook_verify_token:
             raise ValueError("TOKEN environment variable (used as webhook verify token) must be set.")
+        if not self.oauth_encryption_key:
+            raise ValueError("OAUTH_ENCRYPTION_KEY environment variable must be set (base64 url-safe 32 bytes).")
         return self
 
     @field_validator("cors_allowed_origins", mode="before")

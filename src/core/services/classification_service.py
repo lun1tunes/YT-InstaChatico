@@ -59,39 +59,46 @@ class CommentClassificationService(BaseService):
         """Format media context into readable description."""
         description_parts = []
 
-        title = media_context.get("title") or media_context.get("caption")
-        if title:
-            description_parts.append(f"Название видео: {title}")
+        media_type = media_context.get("media_type")
+        if media_type:
+            description_parts.append(f"Post Type: {media_type}")
 
-        channel = media_context.get("username") or media_context.get("channel_title")
-        if channel:
-            description_parts.append(f"Канал: {channel}")
+        username = media_context.get("username")
+        if username:
+            description_parts.append(f"Автор: @{username}")
 
-        if media_context.get("caption"):
-            caption = media_context["caption"]
+        # Carousel info
+        children = media_context.get("children_media_urls") or []
+        if media_type == "CAROUSEL_ALBUM" and isinstance(children, list) and children:
+            description_parts.append(f"Карусель: {len(children)} изображений")
+
+        caption = media_context.get("caption")
+        if caption:
             if len(caption) > 500:
                 caption = caption[:500] + "..."
             description_parts.append(f"Описание: {caption}")
 
-        if media_context.get("permalink"):
-            description_parts.append(f"Ссылка на видео: {media_context['permalink']}")
+        media_url = media_context.get("media_url")
+        if media_url:
+            description_parts.append(f"Media URL: {media_url}")
 
-        if media_context.get("media_url"):
-            description_parts.append(f"Превью: {media_context['media_url']}")
+        permalink = media_context.get("permalink")
+        if permalink:
+            description_parts.append(f"Post URL: {permalink}")
 
-        if media_context.get("posted_at"):
-            description_parts.append(f"Опубликовано: {media_context['posted_at']}")
-
-        engagement_parts = []
+        # Engagement
+        engagement = []
         if media_context.get("comments_count") is not None:
-            engagement_parts.append(f"{media_context['comments_count']} комментариев")
+            engagement.append(f"{media_context['comments_count']} comments")
         if media_context.get("like_count") is not None:
-            engagement_parts.append(f"{media_context['like_count']} отметок \"нравится\"")
-        if media_context.get("view_count") is not None:
-            engagement_parts.append(f"{media_context['view_count']} просмотров")
+            engagement.append(f"{media_context['like_count']} likes")
+        if engagement:
+            description_parts.append("Engagement: " + ", ".join(engagement))
 
-        if engagement_parts:
-            description_parts.append(f"Статистика: {', '.join(engagement_parts)}")
+        # Comments enabled flag
+        if media_context.get("is_comment_enabled") is not None:
+            status = "enabled" if media_context["is_comment_enabled"] else "disabled"
+            description_parts.append(f"Comments: {status}")
 
         return "\n".join(description_parts)
 

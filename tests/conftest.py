@@ -26,6 +26,7 @@ os.environ.setdefault("YOUTUBE_CLIENT_SECRET", "dummy_youtube_client_secret")
 os.environ.setdefault("YOUTUBE_REFRESH_TOKEN", "dummy_youtube_refresh_token")
 os.environ.setdefault("YOUTUBE_API_KEY", "dummy_youtube_api_key")
 os.environ.setdefault("YOUTUBE_CHANNEL_ID", "dummy_youtube_channel_id")
+os.environ.setdefault("OAUTH_ENCRYPTION_KEY", "1p_UUU0j5OJ9SxWwtUWFI7Ak4luuL8EA3twJY86W0Z0=")
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))

@@ -66,6 +66,8 @@ from .repositories.stats_report import StatsReportRepository
 from .repositories.moderation_stats import ModerationStatsRepository
 from .repositories.moderation_stats_report import ModerationStatsReportRepository
 from .repositories.followers_dynamic import FollowersDynamicRepository
+from .repositories.oauth_token import OAuthTokenRepository
+from .services.oauth_token_service import OAuthTokenService
 
 
 class Container(containers.DeclarativeContainer):
@@ -117,6 +119,7 @@ class Container(containers.DeclarativeContainer):
     database_helper = providers.Object(db_helper)
     db_engine = providers.Callable(lambda helper: helper.engine, database_helper)
     db_session_factory = providers.Callable(lambda helper: helper.session_factory, database_helper)
+    db_scoped_session = providers.Callable(lambda helper: helper.session_factory, database_helper)
 
     # Repository factories
     comment_repository_factory = providers.Factory(CommentRepository)
@@ -129,6 +132,7 @@ class Container(containers.DeclarativeContainer):
     moderation_stats_repository_factory = providers.Factory(ModerationStatsRepository)
     moderation_stats_report_repository_factory = providers.Factory(ModerationStatsReportRepository)
     followers_dynamic_repository_factory = providers.Factory(FollowersDynamicRepository)
+    oauth_token_repository_factory = providers.Factory(OAuthTokenRepository)
 
     agent_session_service = providers.Singleton(
         AgentSessionService,
@@ -181,6 +185,8 @@ class Container(containers.DeclarativeContainer):
 
     youtube_service = providers.Singleton(
         YouTubeService,
+        token_service_factory=oauth_token_service.provider,
+        session_factory=db_session_factory.provider,
     )
     youtube_media_service = providers.Factory(
         YouTubeMediaService,
@@ -202,6 +208,12 @@ class Container(containers.DeclarativeContainer):
 
     document_context_service = providers.Singleton(
         DocumentContextService,
+    )
+
+    oauth_token_service = providers.Factory(
+        OAuthTokenService,
+        repository_factory=oauth_token_repository_factory.provider,
+        encryption_key=settings.oauth_encryption_key,
     )
 
     proxy_media_image_use_case = providers.Factory(
@@ -254,10 +266,10 @@ class Container(containers.DeclarativeContainer):
     )
 
     delete_comment_use_case = providers.Factory(
-        DeleteYouTubeCommentUseCase,
+        DeleteCommentUseCase,
         # session is injected at runtime
         comment_repository_factory=comment_repository_factory.provider,
-        youtube_service=youtube_service,
+        instagram_service=instagram_service,
     )
 
     replace_answer_use_case = providers.Factory(
