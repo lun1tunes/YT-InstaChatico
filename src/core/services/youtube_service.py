@@ -168,6 +168,22 @@ class YouTubeService:
         if tokens and tokens.get("account_id"):
             self._account_id = tokens["account_id"]
             return self._account_id
+
+        # Try to resolve via API using current credentials
+        try:
+            youtube = await self._get_youtube()
+
+            def _call():
+                return youtube.channels().list(part="id", mine=True).execute()
+
+            resp = await self._execute(_call)
+            items = resp.get("items") or []
+            if items:
+                self._account_id = items[0].get("id")
+                return self._account_id
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to resolve YouTube channel id via API | error=%s", exc)
+
         self._account_id = self.channel_id or None
         return self._account_id
 
