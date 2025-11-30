@@ -1,4 +1,4 @@
-name: yt-instachatico-app-stack
+name: yt-instachatico-app
 
 services:
   postgres:
@@ -201,13 +201,11 @@ volumes:
     name: yt_instachatico_conversations_data
   yt_instachatico_celerybeat_schedule:
     driver: local
+    name: yt_instachatico_celerybeat_schedule
 
 networks:
   yt_app_network:
     name: yt_app_network
-    name: yt_instachatico_celerybeat_schedule
-
-networks:
   yt_instagram_network:
     driver: bridge
     name: yt-instachatico-network  

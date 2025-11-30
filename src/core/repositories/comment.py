@@ -1,6 +1,7 @@
 """Comment repository for Instagram comment data access."""
 
 import logging
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
