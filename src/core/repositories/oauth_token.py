@@ -25,6 +25,15 @@ class OAuthTokenRepository(BaseRepository[OAuthToken]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_latest_by_provider(self, provider: str) -> Optional[OAuthToken]:
+        stmt = (
+            select(OAuthToken)
+            .where(OAuthToken.provider == provider)
+            .order_by(OAuthToken.updated_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def upsert(
         self,
         *,

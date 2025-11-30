@@ -39,7 +39,7 @@ async def webhook_verification(request: Request):
     if not all([hub_mode, hub_challenge, hub_verify_token]):
         raise HTTPException(status_code=422, detail="Missing required parameters")
 
-    if hub_verify_token != settings.app_webhook_verify_token:
+    if settings.app_webhook_verify_token and hub_verify_token != settings.app_webhook_verify_token:
         raise HTTPException(status_code=403, detail="Invalid verify token")
 
     logger.info("Webhook verification successful")

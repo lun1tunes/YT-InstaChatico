@@ -1,7 +1,7 @@
 """add oauth tokens table
 
 Revision ID: add_oauth_tokens_table
-Revises: 2025_11_16_1538-add_stats_reports_table
+Revises: add_is_ai_generated_to_answers
 Create Date: 2025-12-01 12:00:00.000000
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "add_oauth_tokens_table"
-down_revision = "2025_11_16_1538-add_stats_reports_table"
+down_revision = "add_is_ai_generated_to_answers"
 branch_labels = None
 depends_on = None
 

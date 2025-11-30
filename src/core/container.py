@@ -183,6 +183,12 @@ class Container(containers.DeclarativeContainer):
         MediaAnalysisService,
     )
 
+    oauth_token_service = providers.Factory(
+        OAuthTokenService,
+        repository_factory=oauth_token_repository_factory.provider,
+        encryption_key=settings.oauth_encryption_key,
+    )
+
     youtube_service = providers.Singleton(
         YouTubeService,
         token_service_factory=oauth_token_service.provider,
@@ -208,12 +214,6 @@ class Container(containers.DeclarativeContainer):
 
     document_context_service = providers.Singleton(
         DocumentContextService,
-    )
-
-    oauth_token_service = providers.Factory(
-        OAuthTokenService,
-        repository_factory=oauth_token_repository_factory.provider,
-        encryption_key=settings.oauth_encryption_key,
     )
 
     proxy_media_image_use_case = providers.Factory(

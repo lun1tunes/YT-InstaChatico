@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Self
 from pydantic import BaseModel, Field, model_validator, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict, EnvSettingsSource
@@ -199,7 +200,8 @@ class YouTubeSettings(BaseModel):
         if not self.client_secret:
             missing.append("YOUTUBE_CLIENT_SECRET")
         if not self.refresh_token:
-            missing.append("YOUTUBE_REFRESH_TOKEN")
+            logger = logging.getLogger(__name__)
+            logger.warning("YOUTUBE_REFRESH_TOKEN is not set; relying on stored OAuth tokens")
         if not self.redirect_uri:
             missing.append("YOUTUBE_REDIRECT_URI")
         if missing:
@@ -238,10 +240,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
-        if not self.app_secret:
-            raise ValueError("APP_SECRET environment variable must be set.")
-        if not self.app_webhook_verify_token:
-            raise ValueError("TOKEN environment variable (used as webhook verify token) must be set.")
         if not self.oauth_encryption_key:
             raise ValueError("OAUTH_ENCRYPTION_KEY environment variable must be set (base64 url-safe 32 bytes).")
         return self

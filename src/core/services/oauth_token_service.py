@@ -97,8 +97,12 @@ class OAuthTokenService:
             "has_refresh_token": True,
         }
 
-    async def get_tokens(self, provider: str, account_id: str) -> Optional[Dict[str, Any]]:
-        record = await self.repo.get_by_provider_account(provider, account_id)
+    async def get_tokens(self, provider: str, account_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        record = None
+        if account_id:
+            record = await self.repo.get_by_provider_account(provider, account_id)
+        if not record:
+            record = await self.repo.get_latest_by_provider(provider)
         if not record:
             return None
 
@@ -108,6 +112,7 @@ class OAuthTokenService:
             "token_type": record.token_type,
             "scope": record.scope,
             "expires_at": record.expires_at,
+            "account_id": record.account_id,
         }
 
     async def update_access_token(
@@ -149,3 +154,7 @@ class OAuthTokenService:
                 )
             )
         await self.session.commit()
+
+    async def get_default_account_id(self, provider: str) -> Optional[str]:
+        record = await self.repo.get_latest_by_provider(provider)
+        return record.account_id if record else None

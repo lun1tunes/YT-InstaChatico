@@ -95,8 +95,23 @@ class PollYouTubeCommentsUseCase:
         }
 
     async def _fetch_recent_video_ids(self, channel_id: Optional[str], page_token: Optional[str]) -> list[str]:
+        target_channel = channel_id
+
+        # Prefer dynamically discovered account id, but gracefully fall back to static config
+        if not target_channel and hasattr(self.youtube_service, "get_account_id"):
+            try:
+                target_channel = await self.youtube_service.get_account_id()  # type: ignore[attr-defined]
+            except Exception:
+                logger.debug("Failed to resolve YouTube account id dynamically; falling back to config")
+
+        if not target_channel:
+            target_channel = settings.youtube.channel_id
+
+        if not target_channel:
+            logger.warning("No YouTube channel id available; skipping poll")
+            return []
         resp = await self.youtube_service.list_channel_videos(
-            channel_id=channel_id,
+            channel_id=target_channel,
             page_token=page_token,
             max_results=settings.youtube.poll_max_videos,
         )

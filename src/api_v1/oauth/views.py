@@ -18,7 +18,7 @@ from core.config import settings
 from core.container import get_container, Container
 from core.models import db_helper
 from core.services.oauth_token_service import OAuthTokenService
-from .schemas import AuthUrlResponse
+from .schemas import AuthUrlResponse, AccountStatusResponse
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +81,13 @@ async def google_oauth_callback(
 
     oauth_service: OAuthTokenService = container.oauth_token_service(session=session)
 
-    # In this app, we treat the configured channel_id as the account identifier.
+    # Fetch channel ID using the fresh access token
+    channel_id = await _fetch_channel_id(token_data.get("access_token"))
+    account_id = channel_id or settings.youtube.channel_id or "default"
+
     stored = await oauth_service.store_tokens(
         provider="google",
-        account_id=settings.youtube.channel_id or "default",
+        account_id=account_id,
         token_response=token_data,
     )
 
@@ -154,3 +157,39 @@ def _validate_state(state: str) -> None:
 
     if int(time.time()) - int(ts) > STATE_TTL_SECONDS:
         raise HTTPException(status_code=400, detail="State expired")
+
+
+async def _fetch_channel_id(access_token: Optional[str]) -> Optional[str]:
+    if not access_token:
+        return None
+    url = "https://www.googleapis.com/youtube/v3/channels"
+    params = {"part": "id", "mine": "true"}
+    headers = {"Authorization": f"Bearer {access_token}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            if resp.status_code != 200:
+                logger.warning("Failed to fetch channel ID | status=%s | body=%s", resp.status_code, resp.text)
+                return None
+            data = resp.json()
+            items = data.get("items") or []
+            if not items:
+                return None
+            return items[0].get("id")
+    except httpx.HTTPError as exc:
+        logger.warning("HTTP error while fetching channel ID | error=%s", exc)
+        return None
+
+
+@router.get("/account", response_model=AccountStatusResponse)
+async def google_account_status(
+    session: AsyncSession = Depends(db_helper.scoped_session_dependency),
+    container: Container = Depends(get_container),
+):
+    """Return stored Google account/channel status for UI."""
+    oauth_service: OAuthTokenService = container.oauth_token_service(session=session)
+    tokens = await oauth_service.get_tokens("google")
+    return {
+        "has_tokens": bool(tokens),
+        "account_id": tokens.get("account_id") if tokens else None,
+    }

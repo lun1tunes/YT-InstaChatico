@@ -5,16 +5,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from functools import partial
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build, Resource
 from googleapiclient.errors import HttpError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.config import settings
-from core.utils.task_helpers import get_db_session
-
 logger = logging.getLogger(__name__)
 
 YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl"
@@ -43,7 +42,7 @@ class YouTubeService:
         self.session_factory = session_factory
         self._credentials: Credentials | None = None
         self._youtube: Resource | None = None
-        self._account_id = self.channel_id or "default"
+        self._account_id = self.channel_id or None
 
     # ------------------------------------------------------------------ #
     # Internal helpers
@@ -54,6 +53,8 @@ class YouTubeService:
         """
         tokens = await self._load_tokens()
         if tokens:
+            if not self._account_id:
+                self._account_id = tokens.get("account_id")
             return Credentials(
                 tokens.get("access_token"),
                 refresh_token=tokens.get("refresh_token"),
@@ -100,7 +101,8 @@ class YouTubeService:
         if not self.token_service_factory or not self.session_factory:
             return None
         try:
-            async with get_db_session() as session:
+            session_factory = self.session_factory
+            async with session_factory() as session:  # type: ignore
                 token_service = self.token_service_factory(session=session)
                 return await token_service.get_tokens("google", self._account_id)
         except Exception as exc:  # noqa: BLE001
@@ -117,11 +119,12 @@ class YouTubeService:
             return
         expires_at = self._credentials.expiry
         try:
-            async with get_db_session() as session:
+            session_factory = self.session_factory
+            async with session_factory() as session:  # type: ignore
                 token_service = self.token_service_factory(session=session)
                 await token_service.update_access_token(
                     provider="google",
-                    account_id=self._account_id,
+                    account_id=self._account_id or "default",
                     access_token=self._credentials.token,
                     expires_at=expires_at,
                     refresh_token=refresh_token,
@@ -156,6 +159,17 @@ class YouTubeService:
             )
 
         return await self._execute(_call)
+
+    async def get_account_id(self) -> Optional[str]:
+        """Return the active channel/account id."""
+        if self._account_id:
+            return self._account_id
+        tokens = await self._load_tokens()
+        if tokens and tokens.get("account_id"):
+            self._account_id = tokens["account_id"]
+            return self._account_id
+        self._account_id = self.channel_id or None
+        return self._account_id
 
     async def list_comment_threads(
         self,
