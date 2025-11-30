@@ -229,7 +229,7 @@ async def main():
             print("  python scripts/test_ood_detection.py")
             print("\n")
             print_info("Or use the test endpoint:")
-            print("  curl -X POST http://localhost:4291/api/v1/webhook/test \\")
+            print("  curl -X POST http://localhost:5291/api/v1/webhook/test \\")
             print('    -H "Content-Type: application/json" \\')
             print("    -d '{")
             print('      "comment_id": "test_001",')

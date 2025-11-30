@@ -51,7 +51,7 @@ services:
       - "project=yt-instachatico-app"
       - "service=redis"
     ports:
-      - "${REDIS_HOST_INTERFACE:-127.0.0.1}:${REDIS_PORT:-6381}:6379"
+      - "${REDIS_HOST_INTERFACE:-127.0.0.1}:${REDIS_PORT:-6481}:6379"
     volumes:
       - yt_instachatico_redis_data:/data
       - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
@@ -97,7 +97,7 @@ services:
         condition: service_healthy
     networks:
       - yt_app_network
-    command: sh -c "cd /app/database && alembic upgrade head && cd /app/src && uvicorn main:app --host 0.0.0.0 --port ${PORT:-4291} --reload"
+    command: sh -c "cd /app/database && alembic upgrade head && cd /app/src && uvicorn main:app --host 0.0.0.0 --port ${PORT:-5291} --reload"
     security_opt:
       - no-new-privileges:true
 
@@ -178,7 +178,7 @@ services:
       - "project=yt-instachatico-app"
       - "service=dozzle"
     ports:
-      - "57928:8080"
+      - "58938:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config/dozzle/users.yml:/data/users.yml:ro
