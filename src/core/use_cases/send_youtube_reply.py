@@ -50,6 +50,34 @@ class SendYouTubeReplyUseCase:
             logger.error("Comment not found | comment_id=%s | operation=send_youtube_reply", comment_id)
             return {"status": "error", "reason": f"Comment {comment_id} not found"}
 
+        # Safety: never reply to replies (prevents responding to our own replies)
+        if comment.parent_id:
+            logger.info(
+                "Skipping reply because target comment is a reply | comment_id=%s | parent_id=%s",
+                comment_id,
+                comment.parent_id,
+            )
+            return {"status": "skipped", "reason": "target_is_reply"}
+
+        # Safety: avoid replying to our own channel's comments
+        author_channel_id = None
+        raw_snippet = (comment.raw_data or {}).get("snippet", {}) if comment.raw_data else {}
+        author_channel_obj = raw_snippet.get("authorChannelId") or {}
+        if isinstance(author_channel_obj, dict):
+            author_channel_id = author_channel_obj.get("value")
+        try:
+            my_channel_id = await self.youtube_service.get_account_id()
+        except Exception:
+            my_channel_id = None
+
+        if my_channel_id and author_channel_id and my_channel_id == author_channel_id:
+            logger.info(
+                "Skipping reply because author is our own channel | comment_id=%s | channel_id=%s",
+                comment_id,
+                my_channel_id,
+            )
+            return {"status": "skipped", "reason": "own_comment"}
+
         if use_generated_answer and not reply_text:
             answer_record = await self.answer_repo.get_by_comment_id(comment_id)
             if not answer_record or not answer_record.answer:
