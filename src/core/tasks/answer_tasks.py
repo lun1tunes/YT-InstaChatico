@@ -5,6 +5,7 @@ import logging
 from ..celery_app import celery_app
 from ..utils.task_helpers import async_task, get_db_session, DEFAULT_RETRY_SCHEDULE, get_retry_delay
 from ..container import get_container
+from ..repositories.comment import CommentRepository
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +41,32 @@ async def generate_answer_task(self, comment_id: str):
             )
             try:
                 task_queue = container.task_queue()
+
+                # Load comment to decide platform / skip replies to our own replies
+                repo = CommentRepository(session)
+                comment = await repo.get_by_id(comment_id)
+                if not comment:
+                    logger.error("Cannot send reply: comment not found | comment_id=%s", comment_id)
+                    return result
+
+                # Skip replying to replies (avoid replying to our own answers)
+                if comment.parent_id:
+                    logger.info("Skipping reply for nested comment | comment_id=%s | parent_id=%s", comment_id, comment.parent_id)
+                    return result
+
+                raw_kind = (comment.raw_data or {}).get("kind", "")
+                is_youtube = raw_kind.startswith("youtube#")
+
+                if not is_youtube:
+                    logger.info("Skipping reply because comment is not from YouTube | comment_id=%s", comment_id)
+                    return result
+
                 task_id = task_queue.enqueue(
-                    "core.tasks.instagram_reply_tasks.send_instagram_reply_task",
+                    "core.tasks.youtube_tasks.send_youtube_reply_task",
                     comment_id,
                     result["answer"],
                 )
-                logger.debug(f"Reply task queued | task_id={task_id} | comment_id={comment_id}")
+                logger.debug(f"YouTube reply task queued | task_id={task_id} | comment_id={comment_id}")
             except Exception as e:
                 logger.error(
                     f"Failed to queue reply | comment_id={comment_id} | error={str(e)}",

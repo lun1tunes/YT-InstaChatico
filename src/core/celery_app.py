@@ -127,6 +127,20 @@ def run_initial_health_check(sender, **kwargs):
         pass
 
 
+@celery_app.on_after_configure.connect
+def run_initial_classification_retry(sender, **kwargs):
+    """Kick off a one-time retry scan for pending classifications at startup."""
+    try:
+        sender.send_task(
+            "core.tasks.classification_tasks.retry_failed_classifications",
+            queue="llm_queue",
+            countdown=10,
+        )
+    except Exception:
+        # Best effort; do not block startup
+        pass
+
+
 # Propagate trace_id via Celery headers
 @before_task_publish.connect
 def add_trace_id_on_publish(headers=None, body=None, **kwargs):

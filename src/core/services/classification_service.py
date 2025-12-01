@@ -63,6 +63,10 @@ class CommentClassificationService(BaseService):
         if media_type:
             description_parts.append(f"Post Type: {media_type}")
 
+        title = media_context.get("title")
+        if title:
+            description_parts.append(f"Title: {title}")
+
         username = media_context.get("username")
         if username:
             description_parts.append(f"Автор: @{username}")

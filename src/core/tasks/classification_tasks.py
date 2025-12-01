@@ -5,6 +5,7 @@ import logging
 from ..celery_app import celery_app
 from ..utils.task_helpers import async_task, get_db_session, DEFAULT_RETRY_SCHEDULE, get_retry_delay
 from ..container import get_container
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -137,11 +138,16 @@ async def retry_failed_classifications_async():
             logger.info(f"Starting classification retry | count={len(retry_classifications)}")
 
             for classification in retry_classifications:
+                # Mark as processing to avoid duplicate enqueues from overlapping schedulers
+                await classification_repo.mark_processing(classification, retry_count=classification.retry_count)
                 task_queue.enqueue(
                     "core.tasks.classification_tasks.classify_comment_task",
                     classification.comment_id,
                 )
                 logger.debug(f"Retry queued | comment_id={classification.comment_id}")
+
+            # Persist status updates
+            await session.commit()
 
             logger.info(f"Classification retry completed | queued_count={len(retry_classifications)}")
             return {"retried_count": len(retry_classifications)}

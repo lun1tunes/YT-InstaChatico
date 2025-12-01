@@ -39,7 +39,7 @@ class YouTubeMediaService:
     async def get_or_create_video(self, video_id: str, session: AsyncSession) -> Optional[Media]:
         repo = MediaRepository(session)
         existing = await repo.get_by_id(video_id)
-        if existing:
+        if existing and existing.caption and existing.username and existing.owner:
             return existing
 
         try:
@@ -64,9 +64,27 @@ class YouTubeMediaService:
             or thumbnails.get("default", {}).get("url")
         )
 
+        if existing:
+            # Refresh missing/critical fields for legacy records
+            existing.title = existing.title or snippet.get("title")
+            existing.caption = existing.caption or snippet.get("description")
+            existing.username = existing.username or snippet.get("channelTitle")
+            existing.owner = existing.owner or snippet.get("channelId")
+            existing.comments_count = _safe_int(stats.get("commentCount"))
+            existing.like_count = _safe_int(stats.get("likeCount"))
+            existing.media_url = existing.media_url or thumb_url
+            existing.permalink = existing.permalink or f"https://www.youtube.com/watch?v={video_id}"
+            existing.posted_at = existing.posted_at or _parse_iso8601(snippet.get("publishedAt"))
+            existing.raw_data = video
+            existing.updated_at = now_db_utc()
+            await session.commit()
+            await session.refresh(existing)
+            return existing
+
         media = Media(
             id=video_id,
             permalink=f"https://www.youtube.com/watch?v={video_id}",
+            title=snippet.get("title"),
             caption=snippet.get("description"),
             media_url=thumb_url,
             media_type="VIDEO",

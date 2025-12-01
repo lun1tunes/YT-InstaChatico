@@ -16,6 +16,7 @@ class Media(Base):
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True, comment="Instagram media ID")
     permalink: Mapped[str] = mapped_column(Text, nullable=False, comment="Instagram post permalink URL")
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="Post/video title")
     caption: Mapped[str | None] = mapped_column(String, nullable=True, comment="Post caption text")
     media_url: Mapped[str | None] = mapped_column(Text, nullable=True, comment="URL to the media file (first image for carousels)")
     media_type: Mapped[str | None] = mapped_column(
