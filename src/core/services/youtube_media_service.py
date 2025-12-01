@@ -12,6 +12,7 @@ from core.interfaces.services import IYouTubeService
 from core.models import Media
 from core.repositories.media import MediaRepository
 from core.utils.time import now_db_utc
+from core.services.youtube_service import QuotaExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,18 @@ class YouTubeMediaService:
 
         try:
             details = await self.youtube_service.get_video_details(video_id)
+        except QuotaExceeded:
+            # Let caller handle quota exhaustion (propagate to polling logic)
+            raise
         except Exception as exc:  # noqa: BLE001
+            # If we already have a cached record, return it to preserve resilience
+            if existing:
+                logger.warning(
+                    "Using cached video details due to fetch error | video_id=%s | error=%s",
+                    video_id,
+                    exc,
+                )
+                return existing
             logger.error("Failed to fetch video details | video_id=%s | error=%s", video_id, exc)
             return None
 
