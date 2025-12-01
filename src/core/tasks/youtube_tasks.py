@@ -28,6 +28,14 @@ async def poll_youtube_comments_task(self, channel_id: str | None = None):
 
     async with get_db_session() as session:
         container = get_container()
+
+        # Guard: skip polling if no OAuth tokens and no env refresh token
+        oauth_service = container.oauth_token_service(session=session)
+        tokens = await oauth_service.get_tokens("google")
+        if not tokens and not settings.youtube.refresh_token:
+            logger.warning("YouTube polling skipped: no OAuth tokens configured and no refresh token in env.")
+            return {"status": "skipped", "reason": "missing_auth", "video_count": 0, "new_comments": 0, "api_errors": 0}
+
         use_case = container.poll_youtube_comments_use_case(session=session)
         result = await use_case.execute(channel_id=target_channel)
 

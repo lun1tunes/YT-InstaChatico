@@ -14,6 +14,12 @@ from googleapiclient.errors import HttpError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.config import settings
+
+
+class MissingYouTubeAuth(Exception):
+    """Raised when no valid YouTube OAuth tokens are available."""
+
+
 logger = logging.getLogger(__name__)
 
 YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl"
@@ -65,14 +71,17 @@ class YouTubeService:
                 expiry=tokens.get("expires_at"),
             )
 
-        return Credentials(
-            None,
-            refresh_token=self.refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            scopes=[YOUTUBE_SCOPE],
-        )
+        if self.refresh_token:
+            return Credentials(
+                None,
+                refresh_token=self.refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                scopes=[YOUTUBE_SCOPE],
+            )
+
+        raise MissingYouTubeAuth("No YouTube OAuth tokens available. Complete Google OAuth first.")
 
     async def _get_youtube(self) -> Resource:
         if self._credentials is None:
@@ -80,6 +89,8 @@ class YouTubeService:
 
         # Refresh if needed
         if not self._credentials.valid:
+            if not self._credentials.refresh_token:
+                raise MissingYouTubeAuth("Missing refresh token for YouTube. Complete Google OAuth first.")
             try:
                 self._credentials.refresh(Request())
                 await self._persist_refreshed_tokens()
@@ -102,7 +113,15 @@ class YouTubeService:
             return None
         try:
             session_factory = self.session_factory
-            async with session_factory() as session:  # type: ignore
+            # Resolve to an actual session instance, handling factories or sessionmaker
+            factory_result = session_factory() if callable(session_factory) else session_factory
+
+            if isinstance(factory_result, async_sessionmaker):
+                session_cm = factory_result()
+            else:
+                session_cm = factory_result
+
+            async with session_cm as session:  # type: ignore
                 token_service = self.token_service_factory(session=session)
                 return await token_service.get_tokens("google", self._account_id)
         except Exception as exc:  # noqa: BLE001

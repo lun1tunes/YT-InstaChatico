@@ -16,6 +16,7 @@ from core.repositories.classification import ClassificationRepository
 from core.models.instagram_comment import InstagramComment
 from core.models.comment_classification import CommentClassification
 from core.utils.time import now_db_utc
+from core.services.youtube_service import MissingYouTubeAuth
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,9 @@ class PollYouTubeCommentsUseCase:
         poll_started = now_db_utc()
         try:
             videos = list(video_ids) if video_ids else await self._fetch_recent_video_ids(channel_id, page_token)
+        except MissingYouTubeAuth as exc:
+            logger.warning("YouTube auth missing; skipping poll | reason=%s", exc)
+            return {"status": "error", "reason": str(exc), "video_count": 0, "new_comments": 0, "api_errors": 0, "duration_seconds": 0.0}
         except Exception as exc:  # noqa: BLE001
             logger.error("Failed to fetch video list | error=%s", exc)
             return {"status": "error", "reason": str(exc)}
