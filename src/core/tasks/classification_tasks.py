@@ -22,6 +22,15 @@ async def classify_comment_task(self, comment_id: str):
     """Classify Instagram comment using AI - orchestration only."""
     logger.info(f"Task started | comment_id={comment_id} | retry={self.request.retries}/{self.max_retries}")
 
+    # Guard: skip if OpenAI API key is not configured/placeholder
+    api_key = settings.openai.api_key or ""
+    if not api_key or api_key.startswith("open_ai_token") or api_key.startswith("your_openai_api_key"):
+        logger.error(
+            "Classification skipped: OpenAI API key is not configured. "
+            "Set OPENAI_API_KEY to a valid key to enable classification."
+        )
+        return {"status": "skipped", "reason": "missing_openai_api_key"}
+
     async with get_db_session() as session:
         container = get_container()
         use_case = container.classify_comment_use_case(session=session)
