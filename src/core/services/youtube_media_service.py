@@ -39,8 +39,7 @@ class YouTubeMediaService:
     async def get_or_create_video(self, video_id: str, session: AsyncSession) -> Optional[Media]:
         repo = MediaRepository(session)
         existing = await repo.get_by_id(video_id)
-        if existing and existing.caption and existing.username and existing.owner:
-            return existing
+        # Always fetch latest details to refresh legacy records (title/description/etc.)
 
         try:
             details = await self.youtube_service.get_video_details(video_id)

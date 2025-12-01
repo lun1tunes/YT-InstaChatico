@@ -20,6 +20,10 @@ class MissingYouTubeAuth(Exception):
     """Raised when no valid YouTube OAuth tokens are available."""
 
 
+class QuotaExceeded(Exception):
+    """Raised when YouTube Data API quota is exhausted."""
+
+
 logger = logging.getLogger(__name__)
 
 YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl"
@@ -139,7 +143,14 @@ class YouTubeService:
         expires_at = self._credentials.expiry
         try:
             session_factory = self.session_factory
-            async with session_factory() as session:  # type: ignore
+            factory_result = session_factory() if callable(session_factory) else session_factory
+
+            if isinstance(factory_result, async_sessionmaker):
+                session_cm = factory_result()
+            else:
+                session_cm = factory_result
+
+            async with session_cm as session:  # type: ignore
                 token_service = self.token_service_factory(session=session)
                 await token_service.update_access_token(
                     provider="google",
@@ -280,6 +291,9 @@ class YouTubeService:
                 logger.error("YouTube API error: %s | status=%s", http_err, status)
                 if hasattr(http_err, "error_details") and http_err.error_details:
                     logger.error("YouTube error details: %s", http_err.error_details)
+                    # Detect quota exhaustion explicitly
+                    if any(d.get("reason") == "quotaExceeded" for d in http_err.error_details if isinstance(d, dict)):
+                        raise QuotaExceeded("YouTube quota exceeded") from http_err
                 # Basic quota/backoff handling
                 if getattr(http_err, "res", None) and getattr(http_err.res, "status", None) == 403:
                     # Small exponential backoff

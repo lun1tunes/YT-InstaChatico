@@ -39,7 +39,14 @@ async def poll_youtube_comments_task(self, channel_id: str | None = None):
         use_case = container.poll_youtube_comments_use_case(session=session)
         result = await use_case.execute(channel_id=target_channel)
 
-        if result.get("status") == "error" and self.request.retries < self.max_retries:
+        status = result.get("status")
+        if status == "quota_exceeded":
+            logger.warning(
+                "YouTube quota exceeded; skipping retries for poll task | task_id=%s | reason=%s",
+                task_id,
+                result.get("reason"),
+            )
+        elif status == "error" and self.request.retries < self.max_retries:
             delay = get_retry_delay(self.request.retries)
             logger.warning(
                 "Task retry scheduled: poll_youtube_comments_task | task_id=%s | reason=%s | countdown=%ss",

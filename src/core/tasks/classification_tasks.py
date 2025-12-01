@@ -139,7 +139,10 @@ async def retry_failed_classifications_async():
 
             for classification in retry_classifications:
                 # Mark as processing to avoid duplicate enqueues from overlapping schedulers
-                await classification_repo.mark_processing(classification, retry_count=classification.retry_count)
+                await classification_repo.mark_processing(
+                    classification,
+                    retry_count=classification.retry_count + 1,
+                )
                 task_queue.enqueue(
                     "core.tasks.classification_tasks.classify_comment_task",
                     classification.comment_id,

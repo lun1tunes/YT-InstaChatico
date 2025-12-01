@@ -61,6 +61,26 @@ async def generate_answer_task(self, comment_id: str):
                     logger.info("Skipping reply because comment is not from YouTube | comment_id=%s", comment_id)
                     return result
 
+                # Avoid replying to our own replies/comments (author channel id == our channel)
+                author_channel_id = None
+                snippet = (comment.raw_data or {}).get("snippet", {}) or {}
+                if isinstance(snippet.get("authorChannelId"), dict):
+                    author_channel_id = snippet["authorChannelId"].get("value")
+
+                try:
+                    yt_service = container.youtube_service()
+                    my_channel_id = await yt_service.get_account_id()
+                except Exception:
+                    my_channel_id = None
+
+                if my_channel_id and author_channel_id and author_channel_id == my_channel_id:
+                    logger.info(
+                        "Skipping reply because author is our own channel | comment_id=%s | channel_id=%s",
+                        comment_id,
+                        my_channel_id,
+                    )
+                    return result
+
                 task_id = task_queue.enqueue(
                     "core.tasks.youtube_tasks.send_youtube_reply_task",
                     comment_id,
