@@ -205,6 +205,7 @@ class PollYouTubeCommentsUseCase:
 
         # Replies (if expanded)
         replies = thread.get("replies", {}).get("comments", []) or []
+        reply_stop = False
         for reply in replies:
             reply_snippet = reply.get("snippet", {})
             reply_id = reply.get("id")
@@ -212,10 +213,10 @@ class PollYouTubeCommentsUseCase:
                 reply_published_str = reply_snippet.get("publishedAt")
                 reply_published = _parse_datetime(reply_published_str) if reply_published_str else None
                 if latest_seen and reply_published and reply_published < latest_seen:
-                    stop_early = True
+                    reply_stop = True
                     continue
                 if not latest_seen and cutoff_created_at and reply_published and reply_published < cutoff_created_at:
-                    stop_early = True
+                    reply_stop = True
                     continue
                 created = await self._persist_comment(
                     comment_id=reply_id,
@@ -237,7 +238,8 @@ class PollYouTubeCommentsUseCase:
             added += fetched
             stop_early = stop_early or stop_due_cutoff
 
-        return stop_early, added
+        # Propagate stop if inline replies indicated historical data only
+        return stop_early or reply_stop, added
 
     async def _fetch_additional_replies(
         self,
