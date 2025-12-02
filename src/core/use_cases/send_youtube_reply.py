@@ -103,11 +103,24 @@ class SendYouTubeReplyUseCase:
             return {"status": "error", "reason": str(exc)}
 
         reply_id = result.get("id")
-        answer_record.reply_sent = True
-        answer_record.reply_sent_at = now_db_utc()
-        answer_record.reply_status = "sent"
         answer_record.reply_response = result
-        answer_record.reply_id = reply_id
+
+        if not reply_id:
+            # Treat missing reply ID as failure so we can retry or inspect later
+            answer_record.reply_sent = False
+            answer_record.reply_status = "failed"
+            answer_record.reply_error = "YouTube reply succeeded but no reply_id returned"
+            logger.error(
+                "YouTube reply did not return reply_id | comment_id=%s | response=%s",
+                comment_id,
+                result,
+            )
+        else:
+            answer_record.reply_sent = True
+            answer_record.reply_sent_at = now_db_utc()
+            answer_record.reply_status = "sent"
+            answer_record.reply_error = None
+            answer_record.reply_id = reply_id
 
         try:
             await self.session.commit()

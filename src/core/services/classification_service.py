@@ -29,6 +29,8 @@ class CommentClassificationService(BaseService):
             self.agent_executor: IAgentExecutor = AgentExecutor()
         else:
             self.agent_executor = agent_executor
+        # Track which conversations already received media context to avoid duplicate injections/logs
+        self._context_initialized: set[str] = set()
 
     async def _get_session_with_media_context(
         self, conversation_id: str, media_context: Optional[Dict[str, Any]] = None
@@ -36,7 +38,7 @@ class CommentClassificationService(BaseService):
         """Get or create session, inject media context once on first message."""
         logger.debug(f"Preparing agent session for conversation_id: {conversation_id}")
 
-        if media_context:
+        if media_context and conversation_id not in self._context_initialized:
             media_description = self._create_media_description(media_context)
             context_items = [
                 {
@@ -49,6 +51,7 @@ class CommentClassificationService(BaseService):
             ]
             session = await self.session_service.ensure_context(conversation_id, context_items)
             logger.info(f"✅ Media context ensured for conversation: {conversation_id}")
+            self._context_initialized.add(conversation_id)
         else:
             session = self.session_service.get_session(conversation_id)
 

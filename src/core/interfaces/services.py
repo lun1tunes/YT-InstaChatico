@@ -247,6 +247,16 @@ class IYouTubeService(Protocol):
         """Fetch top-level comment threads for a video (includes replies if available)."""
         ...
 
+    async def list_comment_replies(
+        self,
+        parent_id: str,
+        page_token: Optional[str] = None,
+        max_results: int = 100,
+        order: str = "time",
+    ) -> dict:
+        """Fetch replies for a specific top-level comment (comments.list with parentId)."""
+        ...
+
     async def reply_to_comment(self, parent_id: str, text: str) -> dict:
         """Post a reply to an existing comment."""
         ...

@@ -30,14 +30,17 @@ class ClassificationRepository(BaseRepository[CommentClassification]):
 
     async def get_pending_retries(self) -> List[CommentClassification]:
         """Get classifications pending retry."""
-        result = await self.session.execute(
-            select(CommentClassification).where(
+        stmt = (
+            select(CommentClassification)
+            .where(
                 and_(
                     CommentClassification.processing_status == ProcessingStatus.RETRY,
-                    CommentClassification.retry_count < CommentClassification.max_retries
+                    CommentClassification.retry_count < CommentClassification.max_retries,
                 )
             )
+            .with_for_update(skip_locked=True)
         )
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def mark_processing(self, classification: CommentClassification, retry_count: int = 0):

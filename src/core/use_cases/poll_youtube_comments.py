@@ -133,7 +133,8 @@ class PollYouTubeCommentsUseCase:
         )
         ids: list[str] = []
         for item in resp.get("items", []):
-            id_block = item.get("id", {})
+            # playlistItems.list returns contentDetails.videoId
+            id_block = item.get("contentDetails", {}) or {}
             video_id = id_block.get("videoId")
             if video_id:
                 ids.append(video_id)
@@ -174,13 +175,22 @@ class PollYouTubeCommentsUseCase:
         top_id = top.get("id")
         added = 0
         stop_early = False
+        total_reply_count = thread.get("snippet", {}).get("totalReplyCount") or 0
 
         published_at_str = top_snippet.get("publishedAt")
         published_at = _parse_datetime(published_at_str) if published_at_str else None
-        if latest_seen and published_at and published_at <= latest_seen:
+        # Strictly older? stop; equal timestamps may occur due to rounding, so allow processing when equal
+        if latest_seen and published_at and published_at < latest_seen:
             return True, 0
 
-        if top_id and (not cutoff_created_at or (published_at and published_at >= cutoff_created_at)):
+        # Apply cutoff only on first ingest (when we have no latest_seen). If we already have comments,
+        # rely on latest_seen to avoid skipping legitimate new comments posted after a long gap.
+        within_cutoff = (
+            not latest_seen
+            and (not cutoff_created_at or (published_at and published_at >= cutoff_created_at))
+        ) or latest_seen is not None
+
+        if top_id and within_cutoff:
             created = await self._persist_comment(
                 comment_id=top_id,
                 video_id=video_id,
@@ -194,16 +204,17 @@ class PollYouTubeCommentsUseCase:
             return True, added
 
         # Replies (if expanded)
-        for reply in thread.get("replies", {}).get("comments", []) or []:
+        replies = thread.get("replies", {}).get("comments", []) or []
+        for reply in replies:
             reply_snippet = reply.get("snippet", {})
             reply_id = reply.get("id")
             if reply_id:
                 reply_published_str = reply_snippet.get("publishedAt")
                 reply_published = _parse_datetime(reply_published_str) if reply_published_str else None
-                if latest_seen and reply_published and reply_published <= latest_seen:
+                if latest_seen and reply_published and reply_published < latest_seen:
                     stop_early = True
                     continue
-                if cutoff_created_at and reply_published and reply_published < cutoff_created_at:
+                if not latest_seen and cutoff_created_at and reply_published and reply_published < cutoff_created_at:
                     stop_early = True
                     continue
                 created = await self._persist_comment(
@@ -215,7 +226,68 @@ class PollYouTubeCommentsUseCase:
                 )
                 added += int(created)
 
+        # If API didn't return all replies (common), fetch remaining via comments.list
+        if top_id and total_reply_count > len(replies):
+            fetched, stop_due_cutoff = await self._fetch_additional_replies(
+                parent_id=top_id,
+                video_id=video_id,
+                latest_seen=latest_seen,
+                cutoff_created_at=cutoff_created_at,
+            )
+            added += fetched
+            stop_early = stop_early or stop_due_cutoff
+
         return stop_early, added
+
+    async def _fetch_additional_replies(
+        self,
+        parent_id: str,
+        video_id: str,
+        latest_seen: Optional[datetime],
+        cutoff_created_at: datetime,
+    ) -> tuple[int, bool]:
+        """Fetch replies via comments.list for a parent comment."""
+        page_token = None
+        added = 0
+        stop_early = False
+
+        while True:
+            resp = await self.youtube_service.list_comment_replies(
+                parent_id=parent_id,
+                page_token=page_token,
+                max_results=100,
+            )
+            comments = resp.get("items", []) or []
+            page_all_old = True
+            for reply in comments:
+                reply_snippet = reply.get("snippet", {}) or {}
+                reply_id = reply.get("id")
+                if not reply_id:
+                    continue
+                reply_published_str = reply_snippet.get("publishedAt")
+                reply_published = _parse_datetime(reply_published_str) if reply_published_str else None
+                if latest_seen and reply_published and reply_published < latest_seen:
+                    # This reply is older than we've already seen; keep scanning the page
+                    continue
+                if not latest_seen and cutoff_created_at and reply_published and reply_published < cutoff_created_at:
+                    # When no latest_seen, cutoff is only for initial backfill
+                    continue
+                page_all_old = False
+                created = await self._persist_comment(
+                    comment_id=reply_id,
+                    video_id=video_id,
+                    snippet=reply_snippet,
+                    parent_id=parent_id,
+                    raw=reply,
+                )
+                added += int(created)
+
+            page_token = resp.get("nextPageToken")
+            # Only break if there is no next page OR all replies on this page were older than thresholds
+            if not page_token or page_all_old:
+                break
+
+        return added, stop_early
 
     async def _persist_comment(
         self,

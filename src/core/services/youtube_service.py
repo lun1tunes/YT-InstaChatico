@@ -53,6 +53,7 @@ class YouTubeService:
         self._credentials: Credentials | None = None
         self._youtube: Resource | None = None
         self._account_id = self.channel_id or None
+        self._uploads_playlist_cache: dict[str, str] = {}
 
     # ------------------------------------------------------------------ #
     # Internal helpers
@@ -171,17 +172,19 @@ class YouTubeService:
         page_token: Optional[str] = None,
         max_results: int = 50,
     ) -> dict:
-        """List videos for a channel (latest first)."""
+        """List videos for a channel (latest first) using uploads playlist (cheaper than search)."""
         youtube = await self._get_youtube()
+
+        playlist_id = await self._get_uploads_playlist_id(channel_id=channel_id)
+        if not playlist_id:
+            raise MissingYouTubeAuth("Unable to resolve uploads playlist id; ensure OAuth is completed.")
 
         def _call():
             return (
-                youtube.search()
+                youtube.playlistItems()
                 .list(
-                    part="id",
-                    channelId=channel_id or self.channel_id,
-                    type="video",
-                    order="date",
+                    part="contentDetails",
+                    playlistId=playlist_id,
                     maxResults=max_results,
                     pageToken=page_token,
                 )
@@ -217,6 +220,34 @@ class YouTubeService:
         self._account_id = self.channel_id or None
         return self._account_id
 
+    async def _get_uploads_playlist_id(self, channel_id: Optional[str]) -> Optional[str]:
+        """Resolve the uploads playlist ID for a channel, caching the result."""
+        target_channel = channel_id or self.channel_id
+
+        # Try cache first
+        if target_channel and target_channel in self._uploads_playlist_cache:
+            return self._uploads_playlist_cache[target_channel]
+
+        youtube = await self._get_youtube()
+
+        def _call():
+            # If no explicit channel, use mine=true
+            params = {"part": "contentDetails"}
+            if target_channel:
+                params["id"] = target_channel
+            else:
+                params["mine"] = True
+            return youtube.channels().list(**params).execute()
+
+        resp = await self._execute(_call)
+        items = resp.get("items") or []
+        if not items:
+            return None
+        uploads_id = items[0].get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
+        if uploads_id and target_channel:
+            self._uploads_playlist_cache[target_channel] = uploads_id
+        return uploads_id
+
     async def list_comment_threads(
         self,
         video_id: str,
@@ -233,6 +264,32 @@ class YouTubeService:
                 .list(
                     part="snippet,replies",
                     videoId=video_id,
+                    textFormat="plainText",
+                    order=order,
+                    maxResults=max_results,
+                    pageToken=page_token,
+                )
+                .execute()
+            )
+
+        return await self._execute(_call)
+
+    async def list_comment_replies(
+        self,
+        parent_id: str,
+        page_token: Optional[str] = None,
+        max_results: int = 100,
+        order: str = "time",
+    ) -> dict:
+        """Fetch replies for a given top-level comment (comments.list parentId)."""
+        youtube = await self._get_youtube()
+
+        def _call():
+            return (
+                youtube.comments()
+                .list(
+                    part="snippet",
+                    parentId=parent_id,
                     textFormat="plainText",
                     order=order,
                     maxResults=max_results,
