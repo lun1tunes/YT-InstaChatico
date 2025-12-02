@@ -133,8 +133,8 @@ class PollYouTubeCommentsUseCase:
         )
         ids: list[str] = []
         for item in resp.get("items", []):
-            # playlistItems.list returns contentDetails.videoId
-            id_block = item.get("contentDetails", {}) or {}
+            # Prefer playlistItems contentDetails.videoId; fallback to legacy search id.videoId
+            id_block = item.get("contentDetails", {}) or item.get("id", {}) or {}
             video_id = id_block.get("videoId")
             if video_id:
                 ids.append(video_id)

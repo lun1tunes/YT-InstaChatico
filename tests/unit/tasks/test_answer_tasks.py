@@ -101,7 +101,8 @@ def test_generate_answer_success_with_reply(monkeypatch):
 
     assert result["status"] == "success"
     use_case.execute.assert_awaited_once_with("c1", retry_count=0)
-    assert queue.calls == [("core.tasks.instagram_reply_tasks.send_instagram_reply_task", "c1", "Hello!")]
+    # DB lookup failure should still route to YouTube reply task, not Instagram fallback
+    assert queue.calls == [("core.tasks.youtube_tasks.send_youtube_reply_task", "c1", "Hello!")]
 
 
 def test_generate_answer_success_without_answer(monkeypatch):
